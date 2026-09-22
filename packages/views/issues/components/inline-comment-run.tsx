@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useTraceIssueLabels } from "../../common/task-transcript/use-trace-issue-labels";
 import { useActorName } from "@multica/core/workspace/hooks";
+import { useIssueConversationView } from "./issue-conversation-view-context";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import { useCancelIssueRun, useRetryIssueRun } from "@multica/core/issues/mutations";
 import { dispatchReasonCode } from "@multica/core/api";
@@ -60,6 +61,7 @@ export function InlineCommentRun({ run, className, viewState, showIdentity = fal
   presentation?: "inline" | "header";
 }) {
   const { task, hasReply } = run;
+  const conversationView = useIssueConversationView();
   const { t } = useT("issues");
   const { t: tAgents } = useT("agents");
   const { getActorName } = useActorName();
@@ -117,6 +119,7 @@ export function InlineCommentRun({ run, className, viewState, showIdentity = fal
   const stepLabel = steps.length > 0 ? t(($) => $.inline_run.steps, { count: steps.length }) : "";
   const stopLabel = cancel.isPending || cancel.isSuccess ? t(($) => $.inline_run.stopping) : t(($) => $.inline_run.stop);
   const transcript = fullLogOpen && <AgentTranscriptDialog open onOpenChange={setFullLogOpen}
+    onOpenConversation={conversationView?.issueId === task.issue_id ? () => { setFullLogOpen(false); conversationView.open(task.id); } : undefined}
     task={task} items={items} agentName={name} isLive={active} finalFocus={logFromKeyboard}
     contentState={isPending ? <p role="status" className="text-body text-muted-foreground">{t(($) => $.inline_run.loading)}</p>
       : isError ? <div role="alert" className="text-body text-destructive">{t(($) => $.inline_run.load_failed)}

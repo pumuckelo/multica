@@ -118,6 +118,7 @@ interface AgentTranscriptDialogProps {
   task: AgentTask;
   items: TimelineItem[];
   agentName: string;
+  agentNameSlot?: React.ReactNode;
   isLive?: boolean;
   /**
    * Whether focus returns to the trigger when the dialog closes. Pass `true`
@@ -136,6 +137,7 @@ interface AgentTranscriptDialogProps {
    * The dialog stays generic — slot content is the caller's concern.
    */
   headerSlot?: React.ReactNode;
+  headerActions?: React.ReactNode;
   footerSlot?: React.ReactNode;
   /** Alternate conversation body; hides log-only inspection chrome. */
   conversationSlot?: React.ReactNode;
@@ -323,9 +325,11 @@ export function AgentTranscriptDialog({
   task,
   items,
   agentName,
+  agentNameSlot,
   isLive = false,
   finalFocus = false,
   headerSlot,
+  headerActions,
   footerSlot,
   contentState,
   conversationSlot,
@@ -887,7 +891,7 @@ export function AgentTranscriptDialog({
             it, why it exists, how long it took and what it cost. Diagnostics
             stay in the ⓘ popover. */}
         <div className="border-b px-4 py-3 shrink-0">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             {statusBadge}
             {/* Primary identity: the agent that ran this. It is the one
                 foreground entity — avatar + medium weight. */}
@@ -899,9 +903,9 @@ export function AgentTranscriptDialog({
                   <Bot className="h-3 w-3" />
                 </div>
               )}
-              <span className="truncate font-medium text-body">
+              {agentNameSlot ?? <span className="truncate font-medium text-body">
                 {agentName || agentInfo?.name || ""}
-              </span>
+              </span>}
             </div>
             {/* Provenance, one muted secondary unit set apart from the agent:
                 who triggered the run and how — reads as "<person> · <how>",
@@ -942,6 +946,7 @@ export function AgentTranscriptDialog({
             )}
 
             <div className="flex shrink-0 items-center gap-0.5">
+              {headerActions}
               {onOpenConversation && <Button variant="outline" size="sm" onClick={onOpenConversation}>
                 {t(($) => $.interaction.open)}
               </Button>}

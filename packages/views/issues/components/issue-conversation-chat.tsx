@@ -19,7 +19,7 @@ export function IssueConversationChat({ items, isLive }: {
     itemContent={(_, item) => <div className={CHAT_COLUMN}>
       <div className="py-2">
         {item.divider ? <p className="text-caption text-muted-foreground" role="separator">{item.content}</p>
-          : item.humanId ? <UserMessageContent content={item.content ?? ""} attachments={[]} />
+          : item.humanId ? <UserMessageContent content={item.humanContent ?? item.content ?? ""} attachments={[]} />
           : item.type === "text" ? <RichContent content={item.content ?? ""} density="compact" phase={isLive ? "streaming" : "settled"} />
           : <ItemRow item={item} />}
       </div>

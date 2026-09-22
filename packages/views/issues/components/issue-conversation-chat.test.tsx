@@ -17,13 +17,14 @@ afterEach(cleanup);
 describe("issue conversation chat", () => {
   it("shows ordered human/assistant text with thinking and tools collapsed even while live", () => {
     const { container } = renderWithI18n(<IssueConversationChat isLive items={[
-      { seq: -1, humanId: "human", type: "text", content: "my question" },
+      { seq: -1, humanId: "human", type: "text", content: "**Human interaction**\n\nmy question", humanContent: "my question" },
       { seq: 1, type: "thinking", content: "private detail" },
       { seq: 2, type: "tool_use", tool: "read", input: { path: "example.ts" } },
       { seq: 3, type: "tool_result", tool: "read", output: "file contents" },
       { seq: 4, type: "text", content: "my answer" },
     ]} />);
     expect(screen.getByText("my question").compareDocumentPosition(screen.getByText("my answer")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/Human interaction/)).not.toBeInTheDocument();
     // Collapsed rows retain a one-line preview, not the expanded body.
     expect(container.querySelector("pre")).toBeNull();
     const collapsed = screen.getAllByRole("button").filter((button) => button.getAttribute("aria-expanded") === "false");

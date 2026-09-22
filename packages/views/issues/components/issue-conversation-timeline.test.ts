@@ -11,6 +11,9 @@ describe("issueConversationTimeline", () => {
     ]};
     const entries = conversationHumanEntries(record, "now", {human:"Human",interrupt:"Interrupt",finish:"Finish",pending:"Pending"});
     expect(entries.map((entry) => entry.id)).toEqual(["input"]);
+    const timeline = issueConversationTimeline([], entries);
+    expect(timeline[0]?.content).toContain("**Human**");
+    expect(timeline[0]?.humanContent).toBe("hello\n\nPending");
   });
   it("does not coalesce assistant prose across a human instruction", () => {
     const result = issueConversationTimeline([

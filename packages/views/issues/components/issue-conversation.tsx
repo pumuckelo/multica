@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { MessageSquare } from "lucide-react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { issueTasksOptions } from "@multica/core/issues/queries";
@@ -15,6 +16,7 @@ import { Field, FieldGroup, FieldLabel, FieldError } from "@multica/ui/component
 import { Alert, AlertDescription } from "@multica/ui/components/ui/alert";
 import { AgentTranscriptDialog } from "../../common/task-transcript/agent-transcript-dialog";
 import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@multica/ui/components/ui/select";
 import { IssueConversationChat } from "./issue-conversation-chat";
 import { conversationHumanEntries, issueConversationTimeline } from "./issue-conversation-timeline";
 import { IssueFullChat } from "./issue-full-chat";
@@ -47,21 +49,40 @@ export function IssueConversation({ issueId, initialTasks, onClose, initialRunId
   const running = runs.filter((task) => !["completed", "cancelled", "failed"].includes(task.status));
   const latest = running[0] ?? runs.at(-1);
   const task = fullChat ? latest : tasks.find((task) => task.id === selectedId) ?? latest;
+  const agentIds = [...new Set(tasks.filter((run) => run.issue_id === issueId).map((run) => run.agent_id))];
   if (!task) return null;
   return <IssueRunConversation key={task.id} task={task} onClose={onClose} onFollowup={setSelectedId} inline={inline}
     ambiguous={running.length > 1} fullRuns={fullChat ? runs : undefined}
-    history={<div className="flex flex-wrap gap-2" role="navigation" aria-label={t(($) => $.interaction.history)}>
+    agentSelector={agentIds.length > 1 ? <ConversationAgentSelector agentIds={agentIds} selectedId={task.agent_id}
+      onSelect={(value) => { setAgentId(value); setSelectedId(null); setFullChat(true); }} /> : undefined}
+    history={<div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2" role="navigation" aria-label={t(($) => $.interaction.history)}>
       <Button variant={fullChat ? "secondary" : "ghost"} size="xs" aria-current={fullChat ? "true" : undefined} onClick={() => setFullChat(true)}>{t(($) => $.interaction.full_chat)}</Button>
-      {tasks.map((run) => <Button key={run.id} variant={!fullChat && run.id === task.id ? "secondary" : "ghost"} size="xs" aria-current={!fullChat && run.id === task.id ? "true" : undefined} onClick={() => { setSelectedId(run.id); setAgentId(run.agent_id); setFullChat(false); }}>
+      {runs.map((run) => <Button key={run.id} variant={!fullChat && run.id === task.id ? "secondary" : "ghost"} size="xs" aria-current={!fullChat && run.id === task.id ? "true" : undefined} onClick={() => { setSelectedId(run.id); setFullChat(false); }}>
         {t(($) => $.interaction.run, { number: tasks.filter((candidate) => candidate.agent_id === run.agent_id)
           .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id)).findIndex((candidate) => candidate.id === run.id) + 1 })} · {run.status}
       </Button>)}
+      </div>
     </div>}
   />;
 }
 
-function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup, inline, fullRuns }: {
+function ConversationAgentSelector({ agentIds, selectedId, onSelect }: { agentIds: string[]; selectedId: string; onSelect: (id: string) => void }) {
+  const workspaceId = useWorkspaceId();
+  const { t } = useT("agents");
+  const agents = useQueries({ queries: agentIds.map((id) => ({ queryKey: ["issue-conversation-agent", workspaceId, id], queryFn: () => api.getAgent(id), staleTime: 30000 })) });
+  const items = agentIds.map((id, index) => ({ value: id, label: agents[index]?.data?.name ?? id }));
+  return <Select items={items} value={selectedId} onValueChange={(value) => { if (value) onSelect(value); }}>
+    <SelectTrigger size="sm" aria-label={t(($) => $.interaction.agent)}><SelectValue /></SelectTrigger>
+    <SelectContent align="start" alignItemWithTrigger={false}><SelectGroup>
+      {items.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+    </SelectGroup></SelectContent>
+  </Select>;
+}
+
+function IssueRunConversation({ task, history, agentSelector, ambiguous, onClose, onFollowup, inline, fullRuns }: {
   task: AgentTask; history: React.ReactNode; ambiguous: boolean; onClose: () => void; onFollowup: (id: string) => void;
+  agentSelector?: React.ReactNode;
   inline?: boolean;
   fullRuns?: AgentTask[];
 }) {
@@ -136,14 +157,14 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup, i
 
   return <AgentTranscriptDialog open inline={inline} onOpenChange={(open) => { if (!open) onClose(); }} task={task}
     agentName={agent?.name ?? t(($) => $.interaction.agent)} items={items} isLive={!terminal}
-    headerSlot={<div className="flex flex-col gap-2">{history}
-      {!fullRuns && <Tabs value={view} onValueChange={(value) => { if (typeof value === "string") setView(value); }}>
-        <TabsList aria-label={t(($) => $.interaction.view)}>
-          <TabsTrigger value="chat">{t(($) => $.interaction.chat)}</TabsTrigger>
+    agentNameSlot={agentSelector}
+    headerSlot={history}
+    headerActions={!fullRuns && <Tabs value={view} onValueChange={(value) => { if (typeof value === "string") setView(value); }}>
+        <TabsList variant="line" aria-label={t(($) => $.interaction.view)}>
+          <TabsTrigger value="chat"><MessageSquare aria-hidden="true" />{t(($) => $.interaction.chat)}</TabsTrigger>
           <TabsTrigger value="logs">{t(($) => $.interaction.logs)}</TabsTrigger>
         </TabsList>
       </Tabs>}
-    </div>}
     conversationSlot={fullRuns ? <IssueFullChat runs={fullRuns} /> : view === "chat" ? <IssueConversationChat items={items} isLive={!terminal} /> : undefined}
     footerSlot={<div className="max-h-[45vh] shrink-0 overflow-y-auto p-4">
       <FieldGroup>

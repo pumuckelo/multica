@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -21,7 +22,7 @@ vi.mock("@multica/core/api", async (importOriginal) => ({
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace" }));
 vi.mock("../../common/task-transcript/agent-transcript-dialog", () => ({
-  AgentTranscriptDialog: ({ headerSlot, footerSlot, conversationSlot }: { headerSlot: ReactNode; footerSlot: ReactNode; conversationSlot?: ReactNode }) => <div role="dialog">{headerSlot}{conversationSlot ?? <div>Transcript inspector</div>}{footerSlot}</div>,
+  AgentTranscriptDialog: ({ agentNameSlot, headerSlot, headerActions, footerSlot, conversationSlot }: { agentNameSlot?: ReactNode; headerSlot: ReactNode; headerActions?: ReactNode; footerSlot: ReactNode; conversationSlot?: ReactNode }) => <div role="dialog">{agentNameSlot}{headerActions}{headerSlot}{conversationSlot ?? <div>Transcript inspector</div>}{footerSlot}</div>,
 }));
 vi.mock("./issue-conversation-chat", () => ({ IssueConversationChat: ({ items }: { items: ConversationTimelineItem[] }) => <div>Chat presentation
   {items.filter((item) => !item.divider).map((item) => <p key={`${item.runId}:${item.humanId ?? item.seq}`}>{item.content}</p>)}
@@ -55,7 +56,8 @@ async function open(run = task) {
 describe("issue worker conversation", () => {
   it("combines only the same agent's history chronologically and sends to its active run", async () => {
     const old = { ...task, id: "4a2e8d1c-7f9b-4e2a-9c1d-123456789abd", status: "completed" as const, created_at: "2026-09-06T00:00:00Z" };
-    const other = { ...task, id: "other", agent_id: "another-agent" };
+    const other = { ...task, id: "4a2e8d1c-7f9b-4e2a-9c1d-123456789abe", agent_id: "another-agent" };
+    vi.mocked(api.getAgent).mockImplementation(async (agentId) => ({ name: agentId === "another-agent" ? "Reviewer" : "Worker" }) as Awaited<ReturnType<typeof api.getAgent>>);
     vi.mocked(api.listTasksByIssue).mockResolvedValue([other, task, old]);
     vi.mocked(api.listTaskMessages).mockImplementation(async (runId) => [{ task_id: runId, issue_id: "issue", seq: 1,
       type: "text", content: runId === old.id ? "Earlier answer" : runId === id ? "Latest answer" : "Other agent answer" }]);
@@ -64,11 +66,18 @@ describe("issue worker conversation", () => {
     const latest = await screen.findByText("Latest answer");
     expect(earlier.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText("Other agent answer")).not.toBeInTheDocument();
-    expect(api.listTaskMessages).not.toHaveBeenCalledWith("other");
+    expect(api.listTaskMessages).not.toHaveBeenCalledWith(other.id);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "continue" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(api.sendTaskInteraction).toHaveBeenCalledWith(id, expect.objectContaining({ text: "continue" })));
     expect(api.followupTaskInteraction).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("combobox", { name: "Agent" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Reviewer" }));
+    await screen.findByText("Other agent answer");
+    expect(screen.queryByText("Earlier answer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Run 2/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Agent" })).toHaveTextContent("Reviewer");
+    expect(screen.queryByRole("tab", { name: "Reviewer" })).not.toBeInTheDocument();
   });
 
   it("full chat uses the newest finished run for follow-up even when opened from an older one", async () => {

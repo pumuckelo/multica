@@ -3,16 +3,17 @@ import { buildTimeline, type TimelineItem } from "../../common/task-transcript/b
 import { redactSecrets } from "../../common/task-transcript/redact";
 import type { TaskInteraction } from "@multica/core/chat";
 
-export interface HumanTimelineEntry { id: string; text: string; createdAt: string }
+export interface HumanTimelineEntry { id: string; text: string; chatText?: string; createdAt: string }
 
-export interface ConversationTimelineItem extends TimelineItem { humanId?: string; runId?: string; divider?: boolean }
+export interface ConversationTimelineItem extends TimelineItem { humanId?: string; humanContent?: string; runId?: string; divider?: boolean }
 
 export function conversationHumanEntries(record: TaskInteraction | null | undefined, createdAt: string,
   labels: { human: string; interrupt: string; finish: string; pending: string }): HumanTimelineEntry[] {
   return [
-    ...(record?.openingInput ? [{ id: "opening", createdAt, text: `**${labels.human}**\n\n${record.openingInput}` }] : []),
+    ...(record?.openingInput ? [{ id: "opening", createdAt, text: `**${labels.human}**\n\n${record.openingInput}`, chatText: record.openingInput }] : []),
     ...(record?.commands ?? []).filter((command) => command.kind !== "complete").map((command) => ({ id: command.id, createdAt: command.createdAt,
       text: `**${labels.human}**\n\n${command.kind === "interrupt" ? labels.interrupt : command.kind === "finish" ? labels.finish : command.text}\n\n${command.error || (!command.receipt ? labels.pending : "")}`,
+      chatText: `${command.kind === "interrupt" ? labels.interrupt : command.kind === "finish" ? labels.finish : command.text}\n\n${command.error || (!command.receipt ? labels.pending : "")}`,
     })),
   ];
 }
@@ -31,7 +32,7 @@ export function issueConversationTimeline(messages: TaskMessagePayload[], human:
     items.push(...buildTimeline(buffer));
     buffer = [];
     const entry = pending[cursor]!;
-    items.push({ seq: -cursor - 1, humanId: entry.id, type: "text", content: redactSecrets(entry.text), created_at: entry.createdAt });
+    items.push({ seq: -cursor - 1, humanId: entry.id, humanContent: redactSecrets(entry.chatText ?? entry.text), type: "text", content: redactSecrets(entry.text), created_at: entry.createdAt });
     cursor++;
   };
   for (const message of [...messages].sort((a, b) => a.seq - b.seq)) {
