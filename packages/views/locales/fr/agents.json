@@ -1,5 +1,6 @@
 {
   "interaction": {
+    "back_to_issue": "Retour à la tâche",
     "view": "Vue de la conversation",
     "chat": "Discussion",
     "logs": "Journaux",

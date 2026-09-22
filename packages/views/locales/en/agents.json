@@ -1,5 +1,6 @@
 {
   "interaction": {
+    "back_to_issue": "Back to issue",
     "view": "Conversation view",
     "chat": "Chat",
     "logs": "Logs",

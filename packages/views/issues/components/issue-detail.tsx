@@ -90,6 +90,7 @@ import { AgentRunComment, CommentCard } from "./comment-card";
 import { EMPTY_COMMENT_RUNS, buildCommentRunView, orderTimelineWithRuns, type CommentRun } from "./comment-runs";
 import { issueTasksOptions } from "@multica/core/issues/queries";
 import { IssueConversationButton } from "./issue-conversation";
+import { IssueConversationView } from "./issue-conversation-view";
 import { SourceContextBadge } from "./source-context-viewer";
 import { RevisionConflictCompare } from "./revision-conflict-compare";
 import { CommentInput } from "./comment-input";
@@ -2782,7 +2783,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             className={cn("absolute top-14 z-30", isMobile ? "right-4" : "right-10")}
           />
         )}
-        <BreadcrumbHeader
+        <IssueConversationView key={id} issueId={id} tasks={commentTasks ?? []} header={<BreadcrumbHeader
           leading={leadingAction}
           segments={breadcrumbSegments}
           leaf={
@@ -2881,7 +2882,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             </Tooltip>
             </>
           }
-        />
+        />}>
 
         {/* scrollbar-gutter both-edges: with classic (space-taking) scrollbars —
             macOS with a mouse or "always show", Windows, Linux — the global
@@ -3502,9 +3503,10 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             threads={minimapThreads}
             scrollContainerEl={scrollContainerEl}
             onJump={jumpToThread}
-            className="absolute bottom-0 right-3 top-12"
+            className="absolute bottom-0 right-3 top-0"
           />
         )}
+        </IssueConversationView>
       </div>
     </ImageSequenceProvider>
     </CurrentIssueRenderContextProvider>

@@ -6,6 +6,7 @@ import { useTraceIssueLabels } from "./use-trace-issue-labels";
 import { Virtuoso, type VirtuosoHandle, type Components } from "react-virtuoso";
 import {
   Bot,
+  ArrowLeft,
   Brain,
   CircleAlert,
   CheckCircle2,
@@ -111,6 +112,7 @@ import "./task-transcript.css";
 // than splitting the surface in two before the reader has asked anything.
 
 interface AgentTranscriptDialogProps {
+  inline?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task: AgentTask;
@@ -137,6 +139,7 @@ interface AgentTranscriptDialogProps {
   footerSlot?: React.ReactNode;
   /** Alternate conversation body; hides log-only inspection chrome. */
   conversationSlot?: React.ReactNode;
+  onOpenConversation?: () => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -314,6 +317,7 @@ function useCopyFeedback() {
 }
 
 export function AgentTranscriptDialog({
+  inline = false,
   open,
   onOpenChange,
   task,
@@ -325,6 +329,7 @@ export function AgentTranscriptDialog({
   footerSlot,
   contentState,
   conversationSlot,
+  onOpenConversation,
 }: AgentTranscriptDialogProps) {
   const { t } = useT("agents");
   const locale = useLocale();
@@ -870,13 +875,12 @@ export function AgentTranscriptDialog({
     !!usage;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="!max-w-5xl !w-[calc(100vw-4rem)] !max-h-[calc(100vh-4rem)] !h-[calc(100vh-4rem)] flex flex-col !p-0 !gap-0 overflow-hidden"
-        showCloseButton={false}
-        finalFocus={finalFocus}
-      >
-        <DialogTitle className="sr-only">{t(($) => $.transcript.dialog_title)}</DialogTitle>
+    <TranscriptFrame inline={inline} open={open} onOpenChange={onOpenChange} finalFocus={finalFocus}>
+        {inline ? <div className="shrink-0 px-4 py-2">
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            <ArrowLeft data-icon="inline-start" />{t(($) => $.interaction.back_to_issue)}
+          </Button>
+        </div> : <DialogTitle className="sr-only">{t(($) => $.transcript.dialog_title)}</DialogTitle>}
 
         {/* ── Header: outcome, identity, spend ─────────────────────────
             Everything a viewer needs BEFORE reading: how it ended, who ran
@@ -916,15 +920,10 @@ export function AgentTranscriptDialog({
                 </>
               )}
               <span className="shrink-0">{triggerLabel}</span>
-              {duration && (
-                <>
-                  <FactDot />
-                  <span className="shrink-0 tabular-nums">
-                    {t(($) => $.transcript.fact_took, { duration })}
-                  </span>
-                </>
-              )}
             </div>
+            {duration && <span className="shrink-0 text-caption text-muted-foreground tabular-nums">
+              {t(($) => $.transcript.fact_took, { duration })}
+            </span>}
 
             {/* What this run cost, in the header of the run you are reading —
                 so "why was this one expensive" is answerable without going
@@ -943,6 +942,9 @@ export function AgentTranscriptDialog({
             )}
 
             <div className="flex shrink-0 items-center gap-0.5">
+              {onOpenConversation && <Button variant="outline" size="sm" onClick={onOpenConversation}>
+                {t(($) => $.interaction.open)}
+              </Button>}
               {hasRunDetails && (
                 <Popover>
                   <PopoverTrigger
@@ -1079,7 +1081,7 @@ export function AgentTranscriptDialog({
                   </PopoverContent>
                 </Popover>
               )}
-              <Button
+              {!inline && <Button
                 variant="ghost"
                 size="icon-sm"
                 onClick={() => onOpenChange(false)}
@@ -1087,7 +1089,7 @@ export function AgentTranscriptDialog({
                 className="text-muted-foreground"
               >
                 <X className="h-4 w-4" />
-              </Button>
+              </Button>}
             </div>
           </div>
         </div>
@@ -1290,9 +1292,22 @@ export function AgentTranscriptDialog({
           )}
         </div>
         {footerSlot}
-      </DialogContent>
-    </Dialog>
+    </TranscriptFrame>
   );
+}
+
+function TranscriptFrame({ inline, open, onOpenChange, finalFocus, children }: {
+  inline: boolean; open: boolean; onOpenChange: (open: boolean) => void;
+  finalFocus: boolean; children: React.ReactNode;
+}) {
+  if (inline) return <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</section>;
+  return <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent
+      className="!max-w-5xl !w-[calc(100vw-4rem)] !max-h-[calc(100vh-4rem)] !h-[calc(100vh-4rem)] flex flex-col !p-0 !gap-0 overflow-hidden"
+      showCloseButton={false} finalFocus={finalFocus}>
+      {children}
+    </DialogContent>
+  </Dialog>;
 }
 
 // Provider slugs this view names differently from the runtime list. The daemon

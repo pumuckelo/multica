@@ -234,6 +234,15 @@ function renderDialog(
   );
 }
 
+it("renders inline without a modal and returns through Back to issue", () => {
+  const onBack = vi.fn();
+  renderWithI18n(<AgentTranscriptDialog inline open onOpenChange={onBack} task={baseTask}
+    items={[]} agentName="Worker" conversationSlot={<div>Conversation body</div>} />);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Back to issue" }));
+  expect(onBack).toHaveBeenCalledWith(false);
+});
+
 beforeEach(() => {
   cleanup();
   copyTextMock.mockClear();

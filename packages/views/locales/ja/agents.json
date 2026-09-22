@@ -1,5 +1,6 @@
 {
   "interaction": {
+    "back_to_issue": "タスクに戻る",
     "view": "会話の表示",
     "chat": "チャット",
     "logs": "ログ",

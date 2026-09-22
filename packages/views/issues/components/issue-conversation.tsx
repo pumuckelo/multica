@@ -18,25 +18,30 @@ import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import { IssueConversationChat } from "./issue-conversation-chat";
 import { issueConversationTimeline } from "./issue-conversation-timeline";
 import { useT } from "../../i18n";
+import { useIssueConversationView } from "./issue-conversation-view-context";
 
 export function IssueConversationButton({ issueId, tasks }: { issueId: string; tasks: AgentTask[] }) {
   const { t } = useT("agents");
   const [open, setOpen] = useState(false);
+  const inlineView = useIssueConversationView();
   if (!tasks.length) return null;
   return <>
-    <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>{t(($) => $.interaction.open)}</Button>
+    <Button variant="ghost" size="sm" onClick={() => {
+      if (inlineView?.issueId === issueId) inlineView.open((tasks.find((task) => task.status === "running") ?? tasks[0]!).id);
+      else setOpen(true);
+    }}>{t(($) => $.interaction.open)}</Button>
     {open && <IssueConversation issueId={issueId} initialTasks={tasks} onClose={() => setOpen(false)} />}
   </>;
 }
 
-function IssueConversation({ issueId, initialTasks, onClose }: { issueId: string; initialTasks: AgentTask[]; onClose: () => void }) {
+export function IssueConversation({ issueId, initialTasks, onClose, initialRunId, inline = false }: { issueId: string; initialTasks: AgentTask[]; onClose: () => void; initialRunId?: string; inline?: boolean }) {
   const { t } = useT("agents");
   const { data: tasks = initialTasks } = useQuery({ ...issueTasksOptions(issueId), initialData: initialTasks, refetchInterval: 1000 });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialRunId ?? null);
   const running = tasks.filter((task) => task.status === "running");
   const task = tasks.find((task) => task.id === selectedId) ?? running[0] ?? tasks[0];
   if (!task) return null;
-  return <IssueRunConversation key={task.id} task={task} onClose={onClose} onFollowup={setSelectedId}
+  return <IssueRunConversation key={task.id} task={task} onClose={onClose} onFollowup={setSelectedId} inline={inline}
     ambiguous={running.length > 1}
     history={<div className="flex flex-wrap gap-2" role="navigation" aria-label={t(($) => $.interaction.history)}>
       {tasks.map((run, index) => <Button key={run.id} variant="ghost" size="xs" aria-current={run.id === task.id ? "true" : undefined} onClick={() => setSelectedId(run.id)}>
@@ -46,8 +51,9 @@ function IssueConversation({ issueId, initialTasks, onClose }: { issueId: string
   />;
 }
 
-function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup }: {
+function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup, inline }: {
   task: AgentTask; history: React.ReactNode; ambiguous: boolean; onClose: () => void; onFollowup: (id: string) => void;
+  inline?: boolean;
 }) {
   const { t } = useT("agents");
   const workspaceId = useWorkspaceId();
@@ -121,7 +127,7 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup }:
     })),
   ]);
 
-  return <AgentTranscriptDialog open onOpenChange={(open) => { if (!open) onClose(); }} task={task}
+  return <AgentTranscriptDialog open inline={inline} onOpenChange={(open) => { if (!open) onClose(); }} task={task}
     agentName={agent?.name ?? t(($) => $.interaction.agent)} items={items} isLive={!terminal}
     headerSlot={<div className="flex flex-col gap-2">{history}
       <Tabs value={view} onValueChange={(value) => { if (typeof value === "string") setView(value); }}>
