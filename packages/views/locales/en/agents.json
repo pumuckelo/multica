@@ -1,5 +1,8 @@
 {
   "interaction": {
+    "view": "Conversation view",
+    "chat": "Chat",
+    "logs": "Logs",
     "open": "Open conversation",
     "history": "Run history",
     "run": "Run {{number}}",

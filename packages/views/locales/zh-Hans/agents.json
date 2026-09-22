@@ -1,5 +1,8 @@
 {
   "interaction": {
+    "view": "对话视图",
+    "chat": "聊天",
+    "logs": "日志",
     "finish": "结束运行",
     "open": "打开对话",
     "history": "运行历史",

@@ -14,6 +14,8 @@ import { Textarea } from "@multica/ui/components/ui/textarea";
 import { Field, FieldGroup, FieldLabel, FieldError } from "@multica/ui/components/ui/field";
 import { Alert, AlertDescription } from "@multica/ui/components/ui/alert";
 import { AgentTranscriptDialog } from "../../common/task-transcript/agent-transcript-dialog";
+import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
+import { IssueConversationChat } from "./issue-conversation-chat";
 import { issueConversationTimeline } from "./issue-conversation-timeline";
 import { useT } from "../../i18n";
 
@@ -61,6 +63,7 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup }:
   const text = draft?.text ?? "";
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState("chat");
   const terminal = ["completed", "cancelled", "failed"].includes(task.status);
   const pending = record?.commands.some((command) => !command.receipt && !command.error) ?? false;
   const connected = !!record && Date.now() - new Date(record.updatedAt).getTime() < 15000;
@@ -120,7 +123,15 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup }:
 
   return <AgentTranscriptDialog open onOpenChange={(open) => { if (!open) onClose(); }} task={task}
     agentName={agent?.name ?? t(($) => $.interaction.agent)} items={items} isLive={!terminal}
-    headerSlot={history}
+    headerSlot={<div className="flex flex-col gap-2">{history}
+      <Tabs value={view} onValueChange={(value) => { if (typeof value === "string") setView(value); }}>
+        <TabsList aria-label={t(($) => $.interaction.view)}>
+          <TabsTrigger value="chat">{t(($) => $.interaction.chat)}</TabsTrigger>
+          <TabsTrigger value="logs">{t(($) => $.interaction.logs)}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </div>}
+    conversationSlot={view === "chat" ? <IssueConversationChat items={items} isLive={!terminal} /> : undefined}
     footerSlot={<div className="max-h-[45vh] shrink-0 overflow-y-auto p-4">
       <FieldGroup>
         <p role="status">{stateLabel}</p>

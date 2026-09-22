@@ -12,9 +12,23 @@ describe("issueConversationTimeline", () => {
   });
   it("retains tool identity across the interruption boundary", () => {
     const result = issueConversationTimeline([
-      { task_id: "run", issue_id: "issue", seq: 1, type: "tool_use", call_id: "call", tool: "read", created_at: "a" },
-      { task_id: "run", issue_id: "issue", seq: 2, type: "tool_result", call_id: "call", output: "done", created_at: "c" },
-    ], [{ id: "stop", text: "Interrupt", createdAt: "b" }]);
+      { task_id: "run", issue_id: "issue", seq: 1, type: "tool_use", call_id: "call", tool: "read", created_at: "2026-01-01T00:00:01Z" },
+      { task_id: "run", issue_id: "issue", seq: 2, type: "tool_result", call_id: "call", output: "done", created_at: "2026-01-01T00:00:03Z" },
+    ], [{ id: "stop", text: "Interrupt", createdAt: "2026-01-01T00:00:02Z" }]);
     expect(result.map((item) => item.callId)).toEqual(["call", undefined, "call"]);
+  });
+  it("interleaves server UTC instructions with daemon offset timestamps", () => {
+    const result = issueConversationTimeline([
+      { task_id: "run", issue_id: "issue", seq: 1, type: "text", content: "before", created_at: "2026-01-01T07:00:01+07:00" },
+      { task_id: "run", issue_id: "issue", seq: 2, type: "text", content: "after", created_at: "2026-01-01T07:00:03+07:00" },
+    ], [{ id: "input", text: "hello", createdAt: "2026-01-01T00:00:02Z" }]);
+    expect(result.map((item) => item.content)).toEqual(["before", "hello", "after"]);
+    expect(result[1]?.humanId).toBe("input");
+  });
+  it("orders fractional seconds numerically instead of putting instructions last", () => {
+    const result = issueConversationTimeline([
+      { task_id: "run", issue_id: "issue", seq: 1, type: "text", content: "reply", created_at: "2026-01-01T00:00:02.500Z" },
+    ], [{ id: "input", text: "question", createdAt: "2026-01-01T00:00:02Z" }]);
+    expect(result.map((item) => item.content)).toEqual(["question", "reply"]);
   });
 });

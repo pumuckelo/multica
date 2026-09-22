@@ -1,5 +1,8 @@
 {
   "interaction": {
+    "view": "会話の表示",
+    "chat": "チャット",
+    "logs": "ログ",
     "finish": "実行を終了",
     "open": "会話を開く",
     "history": "実行履歴",

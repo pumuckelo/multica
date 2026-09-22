@@ -1,5 +1,8 @@
 {
   "interaction": {
+    "view": "대화 보기",
+    "chat": "채팅",
+    "logs": "로그",
     "finish": "실행 완료",
     "open": "대화 열기",
     "history": "실행 기록",

@@ -1,5 +1,8 @@
 {
   "interaction": {
+    "view": "Vue de la conversation",
+    "chat": "Discussion",
+    "logs": "Journaux",
     "finish": "Terminer l’exécution",
     "open": "Ouvrir la conversation",
     "history": "Historique des exécutions",

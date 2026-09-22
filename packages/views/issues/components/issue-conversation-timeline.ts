@@ -4,21 +4,29 @@ import { redactSecrets } from "../../common/task-transcript/redact";
 
 export interface HumanTimelineEntry { id: string; text: string; createdAt: string }
 
+export interface ConversationTimelineItem extends TimelineItem { humanId?: string }
+
+function timestamp(value: string | undefined): number {
+  return value ? Date.parse(value) : NaN;
+}
+
 /** Keep native sequence order and split coalescing at human-input boundaries. */
-export function issueConversationTimeline(messages: TaskMessagePayload[], human: HumanTimelineEntry[]): TimelineItem[] {
-  const pending = [...human].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const items: TimelineItem[] = [];
+export function issueConversationTimeline(messages: TaskMessagePayload[], human: HumanTimelineEntry[]): ConversationTimelineItem[] {
+  const pending = [...human].sort((a, b) => timestamp(a.createdAt) - timestamp(b.createdAt));
+  const items: ConversationTimelineItem[] = [];
   let buffer: TaskMessagePayload[] = [];
   let cursor = 0;
   const appendHuman = () => {
     items.push(...buildTimeline(buffer));
     buffer = [];
     const entry = pending[cursor]!;
-    items.push({ seq: -cursor - 1, type: "text", content: redactSecrets(entry.text), created_at: entry.createdAt });
+    items.push({ seq: -cursor - 1, humanId: entry.id, type: "text", content: redactSecrets(entry.text), created_at: entry.createdAt });
     cursor++;
   };
   for (const message of [...messages].sort((a, b) => a.seq - b.seq)) {
-    while (cursor < pending.length && message.created_at && pending[cursor]!.createdAt <= message.created_at) appendHuman();
+    // RFC3339 offsets and fractional precision differ between the daemon and
+    // server. Compare instants, not their wire-format strings.
+    while (cursor < pending.length && timestamp(pending[cursor]!.createdAt) <= timestamp(message.created_at)) appendHuman();
     buffer.push(message);
   }
   items.push(...buildTimeline(buffer));

@@ -20,8 +20,9 @@ vi.mock("@multica/core/api", async (importOriginal) => ({
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace" }));
 vi.mock("../../common/task-transcript/agent-transcript-dialog", () => ({
-  AgentTranscriptDialog: ({ headerSlot, footerSlot }: { headerSlot: ReactNode; footerSlot: ReactNode }) => <div role="dialog">{headerSlot}{footerSlot}</div>,
+  AgentTranscriptDialog: ({ headerSlot, footerSlot, conversationSlot }: { headerSlot: ReactNode; footerSlot: ReactNode; conversationSlot?: ReactNode }) => <div role="dialog">{headerSlot}{conversationSlot ?? <div>Transcript inspector</div>}{footerSlot}</div>,
 }));
+vi.mock("./issue-conversation-chat", () => ({ IssueConversationChat: () => <div>Chat presentation</div> }));
 const id = "4a2e8d1c-7f9b-4e2a-9c1d-123456789abc";
 const task: AgentTask = { id, agent_id: "agent", runtime_id: "runtime", issue_id: "issue", status: "running", priority: 0,
   created_at: "2026-09-07T00:00:00Z", started_at: "2026-09-07T00:00:00Z", dispatched_at: null, completed_at: null, result: null, error: null };
@@ -49,6 +50,17 @@ async function open(run = task) {
 }
 
 describe("issue worker conversation", () => {
+  it("defaults to chat and switching to logs preserves the draft without executing", async () => {
+    await open();
+    expect(screen.getByText("Chat presentation")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "keep this draft" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Logs" }));
+    expect(screen.getByText("Transcript inspector")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue("keep this draft");
+    expect(api.sendTaskInteraction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: "Chat" }));
+    expect(screen.getByText("Chat presentation")).toBeInTheDocument();
+  });
   it("Finish run uses the explicit finish control only while idle", async () => {
     record.state.state = "awaiting_input";
     await open();

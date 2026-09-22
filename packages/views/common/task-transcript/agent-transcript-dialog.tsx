@@ -135,6 +135,8 @@ interface AgentTranscriptDialogProps {
    */
   headerSlot?: React.ReactNode;
   footerSlot?: React.ReactNode;
+  /** Alternate conversation body; hides log-only inspection chrome. */
+  conversationSlot?: React.ReactNode;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -322,6 +324,7 @@ export function AgentTranscriptDialog({
   headerSlot,
   footerSlot,
   contentState,
+  conversationSlot,
 }: AgentTranscriptDialogProps) {
   const { t } = useT("agents");
   const locale = useLocale();
@@ -1090,10 +1093,10 @@ export function AgentTranscriptDialog({
         </div>
 
         {/* ── What the run produced ──────────────────────────────────── */}
-        <RunOutcomeRow outcome={outcome} branch={task.branch_name} />
+        {!conversationSlot && <RunOutcomeRow outcome={outcome} branch={task.branch_name} />}
 
         {/* ── Where the time went ────────────────────────────────────── */}
-        {lanes && (
+        {!conversationSlot && lanes && (
           <RunTimeline
             lanes={lanes}
             toolKinds={toolKinds}
@@ -1110,7 +1113,7 @@ export function AgentTranscriptDialog({
         )}
 
         {/* ── List toolbar: search left, the two menus right ── */}
-        <div className="flex items-center gap-2 border-b px-4 py-1.5 shrink-0">
+        {!conversationSlot && <div className="flex items-center gap-2 border-b px-4 py-1.5 shrink-0">
           <label className="flex h-7 min-w-0 max-w-xs flex-1 items-center gap-1.5 rounded-md bg-muted px-2 text-caption">
             <Search aria-hidden className="h-3 w-3 shrink-0 text-faint-foreground" />
             <input
@@ -1215,12 +1218,11 @@ export function AgentTranscriptDialog({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-
+        </div>}
         {/* ── Steps, and the inspector when one is selected ───────────── */}
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
-            {contentState ? <div className="flex h-full items-center justify-center p-4">{contentState}</div> : displayRows.length === 0 ? (
+            {conversationSlot ?? (contentState ? <div className="flex h-full items-center justify-center p-4">{contentState}</div> : displayRows.length === 0 ? (
               <div className="flex h-full items-center justify-center text-body text-muted-foreground">
                 {isAntigravityLiveEmpty ? (
                   <div className="flex max-w-md items-center gap-2 px-4 text-center">
@@ -1277,9 +1279,9 @@ export function AgentTranscriptDialog({
                   />
                 )}
               />
-            )}
+            ))}
           </div>
-          {selectedStep && (
+          {!conversationSlot && selectedStep && (
             <StepInspector
               step={selectedStep}
               runStartMs={runStartMs}
