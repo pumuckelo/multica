@@ -15,16 +15,20 @@ import (
 type interactiveRunKey struct{}
 
 func withInteractiveIssueRun(ctx context.Context, task Task, provider string) context.Context {
-	if task.IssueID == "" || task.Agent == nil || (provider != "pi" && provider != "codex") {
+	if !interactiveIssueEnabled(task, provider) {
 		return ctx
+	}
+	return context.WithValue(ctx, interactiveRunKey{}, task.RuntimeID)
+}
+
+func interactiveIssueEnabled(task Task, provider string) bool {
+	if task.IssueID == "" || task.Agent == nil || (provider != "pi" && provider != "codex") {
+		return false
 	}
 	var config struct {
 		Enabled bool `json:"interactive_task_sessions"`
 	}
-	if json.Unmarshal(task.Agent.RuntimeConfig, &config) != nil || !config.Enabled {
-		return ctx
-	}
-	return context.WithValue(ctx, interactiveRunKey{}, task.RuntimeID)
+	return json.Unmarshal(task.Agent.RuntimeConfig, &config) == nil && config.Enabled
 }
 
 // startInteractiveExecution binds the live process to the run's durable inbox.
