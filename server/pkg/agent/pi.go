@@ -991,9 +991,13 @@ var piCustomArgModes = map[string]blockedArgMode{
 // print/JSON mode; using that supported path prevents Windows PowerShell's npm
 // shim from re-tokenising prompt content into options.
 func buildPiArgs(sessionPath string, opts ExecOptions, logger *slog.Logger) []string {
-	args := []string{
-		"-p",
-		"--mode", "json",
+	return buildPiModeArgs(sessionPath, opts, logger, false)
+}
+
+func buildPiModeArgs(sessionPath string, opts ExecOptions, logger *slog.Logger, interactive bool) []string {
+	args := []string{"-p", "--mode", "json"}
+	if interactive {
+		args = []string{"--mode", "rpc"}
 	}
 	if sessionPath != "" {
 		args = append(args, "--session", sessionPath)

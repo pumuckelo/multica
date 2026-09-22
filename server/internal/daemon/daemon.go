@@ -8664,6 +8664,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		ClaudeSettingsPath:     env.ClaudeSettingsPath,
 		QwenpawWorkspace:       env.QwenpawWorkspace,
 	}
+	ctx = withInteractiveIssueRun(ctx, task, provider)
 	// Some providers do not reliably load the per-task runtime config files we
 	// write into the task workdir:
 	//   - openclaw is pinned to the task workdir via the per-task config we
@@ -8749,7 +8750,8 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	var retiredSessionID string
 	defer func() { taskResult.RetiredSessionID = retiredSessionID }()
 
-	if shouldRetryWithFreshSession(result, task.PriorSessionID, tools, provider) {
+	_, isInteractiveRun := ctx.Value(interactiveRunKey{}).(string)
+	if !isInteractiveRun && shouldRetryWithFreshSession(result, task.PriorSessionID, tools, provider) {
 		firstResult := result
 		firstUsage := result.Usage
 		firstTools := tools
@@ -9256,7 +9258,17 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 	agentCtx, agentCancel := context.WithCancel(ctx)
 	defer agentCancel()
 
-	session, err := backend.Execute(agentCtx, prompt, opts)
+	var session *agent.Session
+	var err error
+	if runtimeID, interactive := ctx.Value(interactiveRunKey{}).(string); interactive {
+		liveBackend, supported := backend.(agent.InteractiveBackend)
+		if !supported {
+			return agent.Result{}, 0, fmt.Errorf("runtime does not support interactive issue execution")
+		}
+		session, err = d.startInteractiveExecution(agentCtx, liveBackend, prompt, opts, taskID, runtimeID)
+	} else {
+		session, err = backend.Execute(agentCtx, prompt, opts)
+	}
 	if err != nil {
 		// One provider-agnostic boundary for launches: every backend's
 		// cmd.Start() failure arrives here, so diagnosing ENOEXEC at this point
@@ -9329,6 +9341,16 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 				}
 			}
 			return count
+		}
+	}
+	if session.Control != nil {
+		baseToolCount := watchdogToolCount
+		watchdogToolCount = func() int32 {
+			if session.Control.Snapshot().State == agent.InteractionAwaitingInput {
+				lastActivityAt.Store(time.Now().UnixNano())
+				return 0
+			}
+			return baseToolCount()
 		}
 	}
 	// A backend that can prove its outcome is already decided outranks every

@@ -134,6 +134,7 @@ interface AgentTranscriptDialogProps {
    * The dialog stays generic — slot content is the caller's concern.
    */
   headerSlot?: React.ReactNode;
+  footerSlot?: React.ReactNode;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -319,6 +320,7 @@ export function AgentTranscriptDialog({
   isLive = false,
   finalFocus = false,
   headerSlot,
+  footerSlot,
   contentState,
 }: AgentTranscriptDialogProps) {
   const { t } = useT("agents");
@@ -1285,6 +1287,7 @@ export function AgentTranscriptDialog({
             />
           )}
         </div>
+        {footerSlot}
       </DialogContent>
     </Dialog>
   );

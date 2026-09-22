@@ -24,8 +24,12 @@ type Backend interface {
 
 // ExecOptions configures a single execution.
 type ExecOptions struct {
-	Cwd   string
-	Model string
+	// InteractiveBeforeFinish fences natural completion against durable input
+	// accepted by the run owner. False asks the backend to keep pumping controls.
+	// Only ExecuteInteractive consumes it; ordinary executions ignore it.
+	InteractiveBeforeFinish func() bool
+	Cwd                     string
+	Model                   string
 	// SystemPrompt carries the Multica runtime brief for the few providers
 	// that cannot pick it up from disk. The daemon leaves it empty for every
 	// other provider (see daemon.providerNeedsInlineSystemPrompt), because the
@@ -147,6 +151,9 @@ func runContext(ctx context.Context, timeout time.Duration) (context.Context, co
 
 // Session represents a running agent execution.
 type Session struct {
+	// Control is non-nil only for an explicitly requested interactive run.
+	// Its commands control activity inside this execution, not task cancellation.
+	Control *LiveControl
 	// ToolActivity optionally reports backend-owned tool accounting and its last
 	// transition time, independent of the best-effort transcript. Nil uses the
 	// daemon's message-based accounting. The timestamp gives completed tools a
