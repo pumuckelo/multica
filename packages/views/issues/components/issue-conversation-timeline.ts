@@ -1,10 +1,21 @@
 import type { TaskMessagePayload } from "@multica/core/types/events";
 import { buildTimeline, type TimelineItem } from "../../common/task-transcript/build-timeline";
 import { redactSecrets } from "../../common/task-transcript/redact";
+import type { TaskInteraction } from "@multica/core/chat";
 
 export interface HumanTimelineEntry { id: string; text: string; createdAt: string }
 
-export interface ConversationTimelineItem extends TimelineItem { humanId?: string }
+export interface ConversationTimelineItem extends TimelineItem { humanId?: string; runId?: string; divider?: boolean }
+
+export function conversationHumanEntries(record: TaskInteraction | null | undefined, createdAt: string,
+  labels: { human: string; interrupt: string; finish: string; pending: string }): HumanTimelineEntry[] {
+  return [
+    ...(record?.openingInput ? [{ id: "opening", createdAt, text: `**${labels.human}**\n\n${record.openingInput}` }] : []),
+    ...(record?.commands ?? []).map((command) => ({ id: command.id, createdAt: command.createdAt,
+      text: `**${labels.human}**\n\n${command.kind === "interrupt" ? labels.interrupt : command.kind === "finish" ? labels.finish : command.text}\n\n${command.error || (!command.receipt ? labels.pending : "")}`,
+    })),
+  ];
+}
 
 function timestamp(value: string | undefined): number {
   return value ? Date.parse(value) : NaN;

@@ -1,5 +1,7 @@
 {
   "interaction": {
+    "full_chat": "전체 대화",
+    "history_error": "대화 기록의 일부를 불러오지 못했습니다.",
     "back_to_issue": "태스크로 돌아가기",
     "view": "대화 보기",
     "chat": "채팅",

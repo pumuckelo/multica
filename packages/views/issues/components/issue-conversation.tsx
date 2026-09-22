@@ -16,7 +16,8 @@ import { Alert, AlertDescription } from "@multica/ui/components/ui/alert";
 import { AgentTranscriptDialog } from "../../common/task-transcript/agent-transcript-dialog";
 import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import { IssueConversationChat } from "./issue-conversation-chat";
-import { issueConversationTimeline } from "./issue-conversation-timeline";
+import { conversationHumanEntries, issueConversationTimeline } from "./issue-conversation-timeline";
+import { IssueFullChat } from "./issue-full-chat";
 import { useT } from "../../i18n";
 import { useIssueConversationView } from "./issue-conversation-view-context";
 
@@ -38,22 +39,31 @@ export function IssueConversation({ issueId, initialTasks, onClose, initialRunId
   const { t } = useT("agents");
   const { data: tasks = initialTasks } = useQuery({ ...issueTasksOptions(issueId), initialData: initialTasks, refetchInterval: 1000 });
   const [selectedId, setSelectedId] = useState<string | null>(initialRunId ?? null);
-  const running = tasks.filter((task) => task.status === "running");
-  const task = tasks.find((task) => task.id === selectedId) ?? running[0] ?? tasks[0];
+  const [fullChat, setFullChat] = useState(true);
+  const [agentId, setAgentId] = useState(() => (initialTasks.find((task) => task.id === initialRunId)
+    ?? initialTasks.find((task) => task.status === "running") ?? initialTasks[0])?.agent_id);
+  const runs = tasks.filter((task) => task.issue_id === issueId && task.agent_id === agentId)
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id));
+  const running = runs.filter((task) => !["completed", "cancelled", "failed"].includes(task.status));
+  const latest = running[0] ?? runs.at(-1);
+  const task = fullChat ? latest : tasks.find((task) => task.id === selectedId) ?? latest;
   if (!task) return null;
   return <IssueRunConversation key={task.id} task={task} onClose={onClose} onFollowup={setSelectedId} inline={inline}
-    ambiguous={running.length > 1}
+    ambiguous={running.length > 1} fullRuns={fullChat ? runs : undefined}
     history={<div className="flex flex-wrap gap-2" role="navigation" aria-label={t(($) => $.interaction.history)}>
-      {tasks.map((run, index) => <Button key={run.id} variant="ghost" size="xs" aria-current={run.id === task.id ? "true" : undefined} onClick={() => setSelectedId(run.id)}>
-        {t(($) => $.interaction.run, { number: tasks.length - index })} · {run.status}
+      <Button variant={fullChat ? "secondary" : "ghost"} size="xs" aria-current={fullChat ? "true" : undefined} onClick={() => setFullChat(true)}>{t(($) => $.interaction.full_chat)}</Button>
+      {tasks.map((run) => <Button key={run.id} variant={!fullChat && run.id === task.id ? "secondary" : "ghost"} size="xs" aria-current={!fullChat && run.id === task.id ? "true" : undefined} onClick={() => { setSelectedId(run.id); setAgentId(run.agent_id); setFullChat(false); }}>
+        {t(($) => $.interaction.run, { number: tasks.filter((candidate) => candidate.agent_id === run.agent_id)
+          .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id)).findIndex((candidate) => candidate.id === run.id) + 1 })} · {run.status}
       </Button>)}
     </div>}
   />;
 }
 
-function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup, inline }: {
+function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup, inline, fullRuns }: {
   task: AgentTask; history: React.ReactNode; ambiguous: boolean; onClose: () => void; onFollowup: (id: string) => void;
   inline?: boolean;
+  fullRuns?: AgentTask[];
 }) {
   const { t } = useT("agents");
   const workspaceId = useWorkspaceId();
@@ -119,25 +129,22 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup, i
 
   // Human controls are projections of their durable records, not duplicate
   // task-message writes. Existing rendering retains tool IDs and file diffs.
-  const items = issueConversationTimeline(messages, [
-    ...(record?.openingInput ? [{ id: "opening", createdAt: task.created_at, text: `**${t(($) => $.interaction.human)}**\n\n${record.openingInput}` }] : []),
-    ...(record?.commands ?? []).map((command) => ({
-      id: command.id, createdAt: command.createdAt,
-      text: `**${t(($) => $.interaction.human)}**\n\n${command.kind === "interrupt" ? t(($) => $.interaction.interrupt) : command.kind === "finish" ? t(($) => $.interaction.finish) : command.text}\n\n${command.error || (!command.receipt ? t(($) => $.interaction.pending) : "")}`,
-    })),
-  ]);
+  const items = issueConversationTimeline(messages, conversationHumanEntries(record, task.created_at, {
+    human: t(($) => $.interaction.human), interrupt: t(($) => $.interaction.interrupt),
+    finish: t(($) => $.interaction.finish), pending: t(($) => $.interaction.pending),
+  }));
 
   return <AgentTranscriptDialog open inline={inline} onOpenChange={(open) => { if (!open) onClose(); }} task={task}
     agentName={agent?.name ?? t(($) => $.interaction.agent)} items={items} isLive={!terminal}
     headerSlot={<div className="flex flex-col gap-2">{history}
-      <Tabs value={view} onValueChange={(value) => { if (typeof value === "string") setView(value); }}>
+      {!fullRuns && <Tabs value={view} onValueChange={(value) => { if (typeof value === "string") setView(value); }}>
         <TabsList aria-label={t(($) => $.interaction.view)}>
           <TabsTrigger value="chat">{t(($) => $.interaction.chat)}</TabsTrigger>
           <TabsTrigger value="logs">{t(($) => $.interaction.logs)}</TabsTrigger>
         </TabsList>
-      </Tabs>
+      </Tabs>}
     </div>}
-    conversationSlot={view === "chat" ? <IssueConversationChat items={items} isLive={!terminal} /> : undefined}
+    conversationSlot={fullRuns ? <IssueFullChat runs={fullRuns} /> : view === "chat" ? <IssueConversationChat items={items} isLive={!terminal} /> : undefined}
     footerSlot={<div className="max-h-[45vh] shrink-0 overflow-y-auto p-4">
       <FieldGroup>
         <p role="status">{stateLabel}</p>

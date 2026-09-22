@@ -1,5 +1,7 @@
 {
   "interaction": {
+    "full_chat": "Full chat",
+    "history_error": "Some conversation history could not be loaded.",
     "back_to_issue": "Back to issue",
     "view": "Conversation view",
     "chat": "Chat",

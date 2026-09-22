@@ -1,5 +1,7 @@
 {
   "interaction": {
+    "full_chat": "Discussion complète",
+    "history_error": "Une partie de l’historique n’a pas pu être chargée.",
     "back_to_issue": "Retour à la tâche",
     "view": "Vue de la conversation",
     "chat": "Discussion",

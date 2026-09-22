@@ -1,5 +1,7 @@
 {
   "interaction": {
+    "full_chat": "完整对话",
+    "history_error": "无法加载部分对话历史。",
     "back_to_issue": "返回任务",
     "view": "对话视图",
     "chat": "聊天",

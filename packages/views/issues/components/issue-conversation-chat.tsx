@@ -15,10 +15,11 @@ export function IssueConversationChat({ items, isLive }: {
     data={items}
     initialTopMostItemIndex={{ index: "LAST", align: "end" }}
     followOutput={(atBottom) => atBottom ? "auto" : false}
-    computeItemKey={(_, item) => item.humanId ?? item.seq}
+    computeItemKey={(_, item) => `${item.runId ?? ""}:${item.divider ? "divider" : item.humanId ?? item.seq}`}
     itemContent={(_, item) => <div className={CHAT_COLUMN}>
       <div className="py-2">
-        {item.humanId ? <UserMessageContent content={item.content ?? ""} attachments={[]} />
+        {item.divider ? <p className="text-caption text-muted-foreground" role="separator">{item.content}</p>
+          : item.humanId ? <UserMessageContent content={item.content ?? ""} attachments={[]} />
           : item.type === "text" ? <RichContent content={item.content ?? ""} density="compact" phase={isLive ? "streaming" : "settled"} />
           : <ItemRow item={item} />}
       </div>

@@ -8,6 +8,7 @@ import type { TaskInteraction } from "@multica/core/chat";
 import { useIssueConversationDrafts } from "@multica/core/chat";
 import { renderWithI18n } from "../../test/i18n";
 import { IssueConversationButton } from "./issue-conversation";
+import type { ConversationTimelineItem } from "./issue-conversation-timeline";
 
 vi.mock("@multica/core/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("@multica/core/api")>(),
@@ -22,7 +23,9 @@ vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace" }));
 vi.mock("../../common/task-transcript/agent-transcript-dialog", () => ({
   AgentTranscriptDialog: ({ headerSlot, footerSlot, conversationSlot }: { headerSlot: ReactNode; footerSlot: ReactNode; conversationSlot?: ReactNode }) => <div role="dialog">{headerSlot}{conversationSlot ?? <div>Transcript inspector</div>}{footerSlot}</div>,
 }));
-vi.mock("./issue-conversation-chat", () => ({ IssueConversationChat: () => <div>Chat presentation</div> }));
+vi.mock("./issue-conversation-chat", () => ({ IssueConversationChat: ({ items }: { items: ConversationTimelineItem[] }) => <div>Chat presentation
+  {items.filter((item) => !item.divider).map((item) => <p key={`${item.runId}:${item.humanId ?? item.seq}`}>{item.content}</p>)}
+</div> }));
 const id = "4a2e8d1c-7f9b-4e2a-9c1d-123456789abc";
 const task: AgentTask = { id, agent_id: "agent", runtime_id: "runtime", issue_id: "issue", status: "running", priority: 0,
   created_at: "2026-09-07T00:00:00Z", started_at: "2026-09-07T00:00:00Z", dispatched_at: null, completed_at: null, result: null, error: null };
@@ -50,9 +53,40 @@ async function open(run = task) {
 }
 
 describe("issue worker conversation", () => {
+  it("combines only the same agent's history chronologically and sends to its active run", async () => {
+    const old = { ...task, id: "4a2e8d1c-7f9b-4e2a-9c1d-123456789abd", status: "completed" as const, created_at: "2026-09-06T00:00:00Z" };
+    const other = { ...task, id: "other", agent_id: "another-agent" };
+    vi.mocked(api.listTasksByIssue).mockResolvedValue([other, task, old]);
+    vi.mocked(api.listTaskMessages).mockImplementation(async (runId) => [{ task_id: runId, issue_id: "issue", seq: 1,
+      type: "text", content: runId === old.id ? "Earlier answer" : runId === id ? "Latest answer" : "Other agent answer" }]);
+    await open();
+    const earlier = await screen.findByText("Earlier answer");
+    const latest = await screen.findByText("Latest answer");
+    expect(earlier.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Other agent answer")).not.toBeInTheDocument();
+    expect(api.listTaskMessages).not.toHaveBeenCalledWith("other");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "continue" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(api.sendTaskInteraction).toHaveBeenCalledWith(id, expect.objectContaining({ text: "continue" })));
+    expect(api.followupTaskInteraction).not.toHaveBeenCalled();
+  });
+
+  it("full chat uses the newest finished run for follow-up even when opened from an older one", async () => {
+    const old = { ...task, status: "completed" as const };
+    const newest = { ...old, id: "newest", created_at: "2026-09-08T00:00:00Z" };
+    vi.mocked(api.listTasksByIssue).mockResolvedValue([old, newest]);
+    await open(old);
+    await waitFor(() => expect(api.getTaskInteraction).toHaveBeenCalledWith("newest"));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "follow up" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start follow-up run" }));
+    await waitFor(() => expect(api.followupTaskInteraction).toHaveBeenCalledWith("newest", expect.any(String), "follow up"));
+  });
   it("defaults to chat and switching to logs preserves the draft without executing", async () => {
     await open();
     expect(screen.getByText("Chat presentation")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Full chat" })).toHaveAttribute("aria-current", "true");
+    expect(screen.queryByRole("tab", { name: "Logs" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Run 1/ }));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "keep this draft" } });
     fireEvent.click(screen.getByRole("tab", { name: "Logs" }));
     expect(screen.getByText("Transcript inspector")).toBeInTheDocument();
