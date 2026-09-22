@@ -97,9 +97,13 @@ func writeHeader(b *strings.Builder) {
 // CI-watching, and the handoff paragraph is review-locked verbatim
 // (URL/logs/stop triple, general cleanup handle) — do not reword it without
 // a fresh review decision.
-func writeBackgroundTaskSafetySlim(b *strings.Builder) {
+func writeBackgroundTaskSafetySlim(b *strings.Builder, interactive bool) {
 	b.WriteString("## Background Task Safety\n\n")
-	b.WriteString("Multica marks the task terminal the moment your top-level turn exits — any run-owned work still active is orphaned, its result lost, and the final comment you meant to post never sends. There is no background-completion wakeup, whatever a tool response promises. Never background-and-yield: collect required results inside foreground tool calls that block to completion, run unobservable work synchronously, and never end a turn \"standing by\" for something to finish — that message becomes your final output.\n\n")
+	if interactive {
+		b.WriteString("This is an interactive issue run. A normal reply ends only your current turn: Multica keeps the run and provider process awaiting human input. Reply directly, then yield normally; do not use sleeps, polling, or dummy tools to keep the conversation alive. Finish run, Cancel run, failures, and the run deadline end the process. Closing the editor does not complete the issue. Collect required tool results before replying; do not assume background child work will wake you or survive run closure.\n\n")
+	} else {
+		b.WriteString("Multica marks the task terminal the moment your top-level turn exits — any run-owned work still active is orphaned, its result lost, and the final comment you meant to post never sends. There is no background-completion wakeup, whatever a tool response promises. Never background-and-yield: collect required results inside foreground tool calls that block to completion, run unobservable work synchronously, and never end a turn \"standing by\" for something to finish — that message becomes your final output.\n\n")
+	}
 	b.WriteString("External systems triggered by your completed actions — CI, GitHub Actions after a successful push — are not run-owned: do not wait for them, and do not run `gh pr checks --watch`, `gh run watch`, or sleep/retry polls. A repo's merge gate (\"CI must be green before merge\") is NOT your delivery acceptance criteria. Deliver what you have — \"Local tests pass; CI running: <PR link>\" is a complete hand-off. The one exception: when the trigger comment or the issue's acceptance criteria explicitly ask for the CI result, collect it as ONE foreground blocking call (`gh pr checks <pr> --watch`) inside this same turn.\n\n")
 	b.WriteString("A user explicitly asking for a local service to stay available after the turn is a persistent service handoff, not background-and-yield — allowed only when the running service itself is the requested deliverable. Detach its lifecycle from this run first (durable logs, a recorded cleanup handle such as PID/profile), verify readiness, and reply with the URL, logs, and stop instructions. Without a supervisor, describe survival as best-effort, not guaranteed.\n\n")
 	b.WriteString("Never terminate `multica` or `multica.exe` by executable name: a long-lived matching process may be the workspace daemon. Cancel only the exact child PID you started, and before terminating it compare that PID with `multica daemon status --output json`; never kill it if it is the reported daemon PID.\n\n")
@@ -1055,7 +1059,7 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	// broke prompt-cache prefix stability on every resume; they now travel in
 	// the per-turn user message (daemon.BuildPrompt) instead. See MUL-5377.
 	writeHeader(&b)
-	writeBackgroundTaskSafetySlim(&b)
+	writeBackgroundTaskSafetySlim(&b, kind == kindIssue && ctx.InteractiveIssue)
 	writeAgentIdentity(&b, ctx)
 	writeRequestingUser(&b, ctx)
 	writeWorkspaceContext(&b, ctx)

@@ -6,6 +6,26 @@ import (
 	"time"
 )
 
+func TestFinishRequiresIdleAndFencesFurtherInput(t *testing.T) {
+	now := time.Now()
+	r := Record{Owner: "owner", State: agent.InteractionSnapshot{State: agent.InteractionWorking, Activity: 1}, UpdatedAt: now, Deadline: now.Add(time.Hour)}
+	finish := agent.InteractionCommand{ID: "finish", Kind: "finish", Activity: 1}
+	if r.Accept(finish, "user", now) == nil {
+		t.Fatal("accepted finish while working")
+	}
+	r.State.State = agent.InteractionAwaitingInput
+	if err := r.Accept(finish, "user", now); err != nil {
+		t.Fatal(err)
+	}
+	r.Commands[0].Receipt = &agent.InteractionReceipt{Outcome: "applied", Snapshot: r.State}
+	if r.Accept(agent.InteractionCommand{ID: "late", Kind: "input", Activity: 1, Text: "late"}, "user", now) == nil {
+		t.Fatal("input raced past accepted finish")
+	}
+	if err := r.Accept(finish, "user", now); err != nil {
+		t.Fatal("finish retry not idempotent", err)
+	}
+}
+
 func TestAcceptFencesAndDeduplicates(t *testing.T) {
 	now := time.Now()
 	fresh := func() Record {

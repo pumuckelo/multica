@@ -69,8 +69,11 @@ func (r *Record) Accept(command agent.InteractionCommand, actor string, now time
 	if command.ID == "" || len(command.ID) > 128 || len(command.Text) > 65536 {
 		return errors.New("invalid command size")
 	}
-	if command.Kind != "input" && command.Kind != "interrupt" {
+	if command.Kind != "input" && command.Kind != "interrupt" && command.Kind != "finish" {
 		return errors.New("unsupported command")
+	}
+	if command.Kind == "finish" && r.State.State != agent.InteractionAwaitingInput {
+		return errors.New("interrupt or wait for the reply before finishing the run")
 	}
 	if command.Kind == "input" && strings.TrimSpace(command.Text) == "" {
 		return errors.New("empty input")
@@ -78,6 +81,9 @@ func (r *Record) Accept(command agent.InteractionCommand, actor string, now time
 	// Only one in-flight delivery per run. This also serializes Stop with sends
 	// from other tabs and bounds the reconciliation work after reconnect.
 	for _, input := range r.Commands {
+		if input.Kind == "finish" && input.Error == "" {
+			return errors.New("run finish already requested")
+		}
 		if input.Receipt == nil && input.Error == "" {
 			return agent.ErrInteractionBusy
 		}

@@ -1,5 +1,6 @@
 {
   "interaction": {
+    "finish": "실행 완료",
     "open": "대화 열기",
     "history": "실행 기록",
     "run": "실행 {{number}}",

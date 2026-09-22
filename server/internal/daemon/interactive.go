@@ -60,6 +60,7 @@ func (d *Daemon) startInteractiveExecution(ctx context.Context, backend agent.In
 		return nil, fmt.Errorf("register interactive run: %w", err)
 	}
 	opts.Timeout = time.Until(record.Deadline)
+	opts.KeepInteractiveOpen = true
 	if opts.Timeout <= 0 {
 		return nil, fmt.Errorf("interactive run credential deadline expired")
 	}
@@ -93,7 +94,7 @@ func (d *Daemon) startInteractiveExecution(ctx context.Context, backend agent.In
 		busy := false
 		for {
 			state := session.Control.Snapshot()
-			if state.State == agent.InteractionFinished {
+			if state.State == agent.InteractionFinished && !busy && ack == nil {
 				return
 			}
 			record, err := syncRecord(interaction.Sync{State: state, Acknowledgement: ack})

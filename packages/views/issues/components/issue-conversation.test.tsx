@@ -49,6 +49,17 @@ async function open(run = task) {
 }
 
 describe("issue worker conversation", () => {
+  it("Finish run uses the explicit finish control only while idle", async () => {
+    record.state.state = "awaiting_input";
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Finish run" }));
+    await waitFor(() => expect(api.sendTaskInteraction).toHaveBeenCalledWith(id, expect.objectContaining({ kind: "finish", activity: 1 })));
+    expect(api.cancelTaskById).not.toHaveBeenCalled();
+  });
+  it("cannot finish while the worker is executing", async () => {
+    await open();
+    expect(screen.getByRole("button", { name: "Finish run" })).toBeDisabled();
+  });
   it("Interrupt uses the live control endpoint, never Cancel run", async () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Interrupt" }));

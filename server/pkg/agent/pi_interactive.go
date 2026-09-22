@@ -299,7 +299,12 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 		control.setState(InteractionWorking)
 		finishPoll := time.NewTicker(500 * time.Millisecond)
 		defer finishPoll.Stop()
+		finishRequested := false
 		for {
+			if finishRequested && control.finish() {
+				terminal.Store(true)
+				return
+			}
 			result.Output = output.String()
 			if settled && control.Snapshot().State != InteractionAwaitingInput && (activityError != "" || stopReason == "error" || stopReason == "aborted") {
 				result.Status, result.Error = "failed", activityError
@@ -309,9 +314,13 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 				terminal.Store(true)
 				return
 			}
-			if settled && control.Snapshot().State != InteractionAwaitingInput && control.finish() {
-				terminal.Store(true)
-				return
+			if settled && control.Snapshot().State != InteractionAwaitingInput {
+				if opts.KeepInteractiveOpen {
+					control.setState(InteractionAwaitingInput)
+				} else if control.finish() {
+					terminal.Store(true)
+					return
+				}
 			}
 			select {
 			case <-finishPoll.C:
@@ -329,6 +338,11 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 				}
 			case request := <-control.queue:
 				receipt := InteractionReceipt{Outcome: "applied"}
+				if request.command.Kind == "finish" {
+					finishRequested = true
+					control.acknowledge(request, receipt, nil)
+					continue
+				}
 				if request.command.Kind == "interrupt" {
 					if settled || control.Snapshot().State == InteractionAwaitingInput {
 						receipt.Outcome = "already_idle"

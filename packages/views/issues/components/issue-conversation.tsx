@@ -79,7 +79,7 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup }:
     if (accepted) setDraft(draftKey, { text: accepted.error ? draft.text : draft.pending.kind === "input" ? "" : draft.text });
   }, [draft, draftKey, record, setDraft]);
 
-  const send = async (kind: "input" | "interrupt") => {
+  const send = async (kind: "input" | "interrupt" | "finish") => {
     if (!record || disabled) return;
     setError("");
     const command: TaskInteractionCommand = draft?.pending ?? {
@@ -114,7 +114,7 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup }:
     ...(record?.openingInput ? [{ id: "opening", createdAt: task.created_at, text: `**${t(($) => $.interaction.human)}**\n\n${record.openingInput}` }] : []),
     ...(record?.commands ?? []).map((command) => ({
       id: command.id, createdAt: command.createdAt,
-      text: `**${t(($) => $.interaction.human)}**\n\n${command.kind === "interrupt" ? t(($) => $.interaction.interrupt) : command.text}\n\n${command.error || (!command.receipt ? t(($) => $.interaction.pending) : "")}`,
+      text: `**${t(($) => $.interaction.human)}**\n\n${command.kind === "interrupt" ? t(($) => $.interaction.interrupt) : command.kind === "finish" ? t(($) => $.interaction.finish) : command.text}\n\n${command.error || (!command.receipt ? t(($) => $.interaction.pending) : "")}`,
     })),
   ]);
 
@@ -139,6 +139,7 @@ function IssueRunConversation({ task, history, ambiguous, onClose, onFollowup }:
           </Button>
           {!terminal && <>
             <Button variant="outline" disabled={disabled || !!draft?.pending || record?.state.state !== "working"} onClick={() => void send("interrupt")}>{t(($) => $.interaction.interrupt)}</Button>
+            <Button variant="outline" disabled={disabled || !!draft?.pending || record?.state.state !== "awaiting_input"} onClick={() => void send("finish")}>{t(($) => $.interaction.finish)}</Button>
             <Button variant="ghost" disabled={busy} onClick={async () => {
               setBusy(true); setError("");
               try { await api.cancelTaskById(task.id); await queryClient.invalidateQueries({ queryKey: issueTasksOptions(task.issue_id).queryKey }); }

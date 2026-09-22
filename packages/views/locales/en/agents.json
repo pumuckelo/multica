@@ -19,6 +19,7 @@
     "retry": "Retry delivery",
     "interrupt": "Interrupt",
     "cancel": "Cancel run",
+    "finish": "Finish run",
     "pending": "Delivery pending",
     "uncertain": "Delivery could not be confirmed. Retry with the same request.",
     "cleared": "Queued input cleared by Interrupt",

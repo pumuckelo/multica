@@ -102,7 +102,7 @@ func (c *LiveControl) Submit(ctx context.Context, command InteractionCommand) (I
 	if command.ID == "" || len(command.ID) > 128 {
 		return InteractionReceipt{}, errors.New("a bounded command id is required")
 	}
-	if command.Kind != "input" && command.Kind != "interrupt" {
+	if command.Kind != "input" && command.Kind != "interrupt" && command.Kind != "finish" {
 		return InteractionReceipt{}, errors.New("unsupported interaction command")
 	}
 	if command.Kind == "input" && (strings.TrimSpace(command.Text) == "" || len(command.Text) > 1024*1024) {
@@ -126,6 +126,10 @@ func (c *LiveControl) Submit(ctx context.Context, command InteractionCommand) (I
 		if c.pending != nil || c.snapshot.State == InteractionStarting {
 			c.mu.Unlock()
 			return InteractionReceipt{}, ErrInteractionBusy
+		}
+		if command.Kind == "finish" && c.snapshot.State != InteractionAwaitingInput {
+			c.mu.Unlock()
+			return InteractionReceipt{}, errors.New("interrupt or wait for the reply before finishing the run")
 		}
 		// Bound retained deduplication state; never evict an old ID and risk
 		// delivering its input twice during a long-lived run.

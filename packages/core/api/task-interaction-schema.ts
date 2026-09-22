@@ -36,7 +36,7 @@ export const TaskInteractionFollowupSchema = z.object({ run_id: z.string().min(1
 export interface TaskInteractionCommand {
   owner: string;
   id: string;
-  kind: "input" | "interrupt";
+  kind: "input" | "interrupt" | "finish";
   activity: number;
   text?: string;
 }

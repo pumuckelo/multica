@@ -12,7 +12,7 @@ Open the issue and choose **Open conversation**. It displays the actual worker's
 - **Interrupt** stops the current native activity, then shows **Awaiting input**. The run, provider process, session lock, execution slot, worktree, and task credentials stay alive.
 - Send a correction to continue that same process/run.
 - **Cancel run** remains the existing terminal cancellation action.
-- Natural completion, failure, cancellation, or the displayed deadline closes the process. There is no post-completion warm pool.
+- A normal reply now leaves the run awaiting input. **Finish run** explicitly closes an idle run successfully; failure, cancellation, or the displayed deadline also closes it. There is no post-completion warm pool. See `task_0002_multica_acp.md` for the ACP bridge and lifecycle update.
 - Opening finished history is read-only. **Start follow-up run** explicitly creates a new run and process, pinned to the selected source run's provider history.
 
 A delegated child issue uses the same issue execution path and its assigned agent's opt-in setting. There is no separate subagent transport to maintain.

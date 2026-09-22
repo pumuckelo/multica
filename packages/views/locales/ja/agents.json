@@ -1,5 +1,6 @@
 {
   "interaction": {
+    "finish": "実行を終了",
     "open": "会話を開く",
     "history": "実行履歴",
     "run": "実行 {{number}}",

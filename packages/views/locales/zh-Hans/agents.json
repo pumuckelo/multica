@@ -1,5 +1,6 @@
 {
   "interaction": {
+    "finish": "结束运行",
     "open": "打开对话",
     "history": "运行历史",
     "run": "运行 {{number}}",

@@ -142,6 +142,15 @@ func TestInteractiveBridgeDurableInterruptAndContinuation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	wait(func() bool {
+		return record.State.Activity == 2 && record.State.State == agent.InteractionAwaitingInput && !record.Pending()
+	})
+	mu.Lock()
+	err = record.Accept(agent.InteractionCommand{ID: "finish-run", Kind: "finish", Activity: 2}, "human", time.Now())
+	mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case result := <-session.Result:
 		if result.Status != "completed" {

@@ -1727,19 +1727,32 @@ func (b *codexBackend) executeControlled(ctx context.Context, prompt string, opt
 			finishPoll = ticker.C
 		}
 		activitySettled := false
+		finishRequested := false
 		if control != nil && waitingForTurn {
 			commands = control.queue
 			control.setState(InteractionWorking)
 		}
 
 		for waitingForTurn {
-			if control != nil && activitySettled && control.Snapshot().State != InteractionAwaitingInput && control.finish() {
+			if finishRequested && control.finish() {
 				break
+			}
+			if control != nil && activitySettled && control.Snapshot().State != InteractionAwaitingInput {
+				if opts.KeepInteractiveOpen {
+					control.setState(InteractionAwaitingInput)
+				} else if control.finish() {
+					break
+				}
 			}
 			select {
 			case <-finishPoll:
 			case request := <-commands:
 				receipt := InteractionReceipt{Outcome: "applied"}
+				if request.command.Kind == "finish" {
+					finishRequested = true
+					control.acknowledge(request, receipt, nil)
+					continue
+				}
 				if request.command.Kind == "interrupt" {
 					if activitySettled || control.Snapshot().State == InteractionAwaitingInput {
 						receipt.Outcome = "already_idle"

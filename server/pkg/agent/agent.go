@@ -28,8 +28,10 @@ type ExecOptions struct {
 	// accepted by the run owner. False asks the backend to keep pumping controls.
 	// Only ExecuteInteractive consumes it; ordinary executions ignore it.
 	InteractiveBeforeFinish func() bool
-	Cwd                     string
-	Model                   string
+	// KeepInteractiveOpen waits for explicit finish after a normal native reply.
+	KeepInteractiveOpen bool
+	Cwd                 string
+	Model               string
 	// SystemPrompt carries the Multica runtime brief for the few providers
 	// that cannot pick it up from disk. The daemon leaves it empty for every
 	// other provider (see daemon.providerNeedsInlineSystemPrompt), because the
