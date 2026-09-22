@@ -93,6 +93,10 @@ func (h *Handler) SendTaskInteraction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid interaction command")
 		return
 	}
+	if input.Kind == "complete" {
+		writeError(w, http.StatusBadRequest, "agent completion requires the task-scoped completion endpoint")
+		return
+	}
 	tx, err := h.TxStarter.Begin(r.Context())
 	if err != nil {
 		writeError(w, 500, "begin interaction transaction failed")

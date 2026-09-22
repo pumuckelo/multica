@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -22,7 +23,8 @@ func init() {
 		os.Exit(0)
 	}
 	encoder := json.NewEncoder(os.Stdout)
-	emit := func(v any) { _ = encoder.Encode(v) }
+	var outputMu sync.Mutex
+	emit := func(v any) { outputMu.Lock(); defer outputMu.Unlock(); _ = encoder.Encode(v) }
 	event := func(method string, params any) { emit(map[string]any{"method": method, "params": params}) }
 	scanner := bufio.NewScanner(os.Stdin)
 	turn := 0
@@ -55,6 +57,13 @@ func init() {
 			result["turn"] = map[string]any{"id": turnID}
 			event("turn/started", map[string]any{"threadId": "thread-live", "turn": map[string]any{"id": turnID}})
 			event("item/agentMessage/delta", map[string]any{"threadId": "thread-live", "turnId": turnID, "itemId": fmt.Sprintf("item-%d", turn), "delta": fmt.Sprintf("pid=%d turn=%d", os.Getpid(), turn)})
+			if gate := os.Getenv("MULTICA_TEST_SETTLE_GATE"); gate != "" && turn == 1 {
+				go func() {
+					waitTestSettleGate(gate)
+					event("item/completed", map[string]any{"threadId": "thread-live", "turnId": turnID, "item": map[string]any{"id": "final", "type": "agentMessage", "phase": "final_answer", "text": "final reply preserved"}})
+					event("turn/completed", map[string]any{"threadId": "thread-live", "turn": map[string]any{"id": turnID, "status": "completed"}})
+				}()
+			}
 			if turn > 1 {
 				event("item/completed", map[string]any{"threadId": "thread-live", "turnId": turnID, "item": map[string]any{"id": fmt.Sprintf("item-%d", turn), "type": "agentMessage", "phase": "final_answer", "text": fmt.Sprintf("pid=%d turn=%d", os.Getpid(), turn)}})
 				event("turn/completed", map[string]any{"threadId": "thread-live", "turn": map[string]any{"id": turnID, "status": "completed"}})

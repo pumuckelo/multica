@@ -121,6 +121,14 @@ func TestInteractiveNormalReplyKeepsProcessUntilExplicitFinish(t *testing.T) {
 			if _, err = s.Control.Submit(ctx, InteractionCommand{ID: "bad-finish", Kind: "finish", Activity: 1}); err == nil {
 				t.Fatal("finished an active turn")
 			}
+			if _, err = s.Control.Submit(ctx, InteractionCommand{ID: "agent-complete", Kind: "complete", Activity: 1}); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case result := <-s.Result:
+				t.Fatalf("completion ended a still-active native turn: %+v", result)
+			case <-time.After(30 * time.Millisecond):
+			}
 			if _, err = s.Control.Submit(ctx, InteractionCommand{ID: "pause", Kind: "interrupt", Activity: 1}); err != nil {
 				t.Fatal(err)
 			}

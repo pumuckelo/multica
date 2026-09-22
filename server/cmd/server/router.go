@@ -2314,6 +2314,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Tasks (user-facing, with ownership check)
 			r.Post("/api/tasks/{taskId}/cancel", h.CancelTaskByUser)
+			r.Post("/api/tasks/{taskId}/complete", h.CompleteCurrentRun)
 			r.With(handler.RequireHumanActor).Post("/api/tasks/{taskId}/interaction", h.SendTaskInteraction)
 			r.With(handler.RequireHumanActor).Post("/api/tasks/{taskId}/interaction/follow-up", h.FollowupTaskInteraction)
 

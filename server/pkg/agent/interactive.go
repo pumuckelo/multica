@@ -44,7 +44,7 @@ func (s InteractionSnapshot) Valid() bool {
 
 type InteractionCommand struct {
 	ID       string `json:"id"`
-	Kind     string `json:"kind"` // input or interrupt; cancellation stays run-scoped
+	Kind     string `json:"kind"` // input, interrupt, idle finish, or agent complete; cancellation stays run-scoped
 	Activity uint64 `json:"activity"`
 	Text     string `json:"text,omitempty"`
 }
@@ -102,7 +102,7 @@ func (c *LiveControl) Submit(ctx context.Context, command InteractionCommand) (I
 	if command.ID == "" || len(command.ID) > 128 {
 		return InteractionReceipt{}, errors.New("a bounded command id is required")
 	}
-	if command.Kind != "input" && command.Kind != "interrupt" && command.Kind != "finish" {
+	if command.Kind != "input" && command.Kind != "interrupt" && command.Kind != "finish" && command.Kind != "complete" {
 		return InteractionReceipt{}, errors.New("unsupported interaction command")
 	}
 	if command.Kind == "input" && (strings.TrimSpace(command.Text) == "" || len(command.Text) > 1024*1024) {

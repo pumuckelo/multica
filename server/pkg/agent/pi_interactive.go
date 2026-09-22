@@ -301,16 +301,16 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 		defer finishPoll.Stop()
 		finishRequested := false
 		for {
-			if finishRequested && control.finish() {
-				terminal.Store(true)
-				return
-			}
 			result.Output = output.String()
 			if settled && control.Snapshot().State != InteractionAwaitingInput && (activityError != "" || stopReason == "error" || stopReason == "aborted") {
 				result.Status, result.Error = "failed", activityError
 				if result.Error == "" {
 					result.Error = "pi activity ended with " + stopReason
 				}
+				terminal.Store(true)
+				return
+			}
+			if finishRequested && settled && control.finish() {
 				terminal.Store(true)
 				return
 			}
@@ -338,11 +338,14 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 				}
 			case request := <-control.queue:
 				receipt := InteractionReceipt{Outcome: "applied"}
-				if request.command.Kind == "finish" {
+				if request.command.Kind == "finish" || request.command.Kind == "complete" {
 					finishRequested = true
 					control.acknowledge(request, receipt, nil)
 					continue
 				}
+				// A human correction or interruption cancels the agent's intent
+				// to finish. It must request completion again after the next work.
+				finishRequested = false
 				if request.command.Kind == "interrupt" {
 					if settled || control.Snapshot().State == InteractionAwaitingInput {
 						receipt.Outcome = "already_idle"

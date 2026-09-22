@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -20,7 +21,8 @@ func init() {
 		return
 	}
 	encoder := json.NewEncoder(os.Stdout)
-	emit := func(v any) { _ = encoder.Encode(v) }
+	var outputMu sync.Mutex
+	emit := func(v any) { outputMu.Lock(); defer outputMu.Unlock(); _ = encoder.Encode(v) }
 	scanner := bufio.NewScanner(os.Stdin)
 	prompts := 0
 	cleared := false
@@ -44,6 +46,14 @@ func init() {
 			emit(map[string]any{"type": "message_update", "assistantMessageEvent": map[string]any{"type": "text_delta", "delta": fmt.Sprintf("pid=%d prompt=%d", os.Getpid(), prompts)}})
 			// Low-level end can precede retries/compaction; it is not terminal.
 			emit(map[string]any{"type": "agent_end"})
+			if gate := os.Getenv("MULTICA_TEST_SETTLE_GATE"); gate != "" && prompts == 1 {
+				go func() {
+					waitTestSettleGate(gate)
+					emit(map[string]any{"type": "message_update", "assistantMessageEvent": map[string]any{"type": "text_delta", "delta": "final reply preserved"}})
+					emit(map[string]any{"type": "turn_end", "message": map[string]any{"stopReason": "stop"}})
+					emit(map[string]any{"type": "agent_settled"})
+				}()
+			}
 			if prompts > 1 || command["message"] == "finish" {
 				emit(map[string]any{"type": "turn_end", "message": map[string]any{"stopReason": "stop", "model": "fake", "usage": map[string]int{"input": 2, "output": 3}}})
 				emit(map[string]any{"type": "agent_settled"})

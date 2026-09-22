@@ -1,5 +1,13 @@
 # Interactive issue conversations — implementation notes
 
+## Agent-requested run completion
+
+Interactive agents can call `multica issue finish-run` using their injected task-scoped credentials. This queues successful completion of that run after the current native turn settles, preserving the final reply. Ordinary replies still keep the run awaiting input. Agents are instructed to collect tool results, update the issue as appropriate, call this command, then deliver their final reply. Updating issue status alone does not finish a run.
+
+Human steering or Interrupt cancels pending agent completion. The agent can request it again after addressing the correction. The existing human Finish action remains idle-only; Cancel remains run cancellation. Native errors, cancellation, and deadlines are not converted into success by this request. The endpoint accepts only the authenticated token's own issue run; it is not a general agent permission to finish other workers.
+
+Rebuild/restart the backend and desktop daemon/CLI to use this command; start a new run for the updated instructions. Existing live processes are not hot-patched. No additional migration is required for this completion command.
+
 ## Enable and use
 
 Build/deploy the matching server, daemon, and web/desktop client from this checkout. Apply migration 536 through the normal migration command. This change does not update a previously installed Multica binary or desktop app automatically.

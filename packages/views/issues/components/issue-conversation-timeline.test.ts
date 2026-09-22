@@ -1,8 +1,17 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { issueConversationTimeline } from "./issue-conversation-timeline";
+import { conversationHumanEntries, issueConversationTimeline } from "./issue-conversation-timeline";
+import type { TaskInteraction } from "@multica/core/chat";
 
 describe("issueConversationTimeline", () => {
+  it("does not present agent completion intent as a human message", () => {
+    const record: TaskInteraction = {owner:"process",state:{state:"working",activity:1},deadline:"later",updatedAt:"now",openingInput:"",finishing:false,commands:[
+      {id:"complete",kind:"complete",activity:1,actorId:"agent",createdAt:"now",text:"",error:"",receipt:null},
+      {id:"input",kind:"input",text:"hello",activity:1,actorId:"human",createdAt:"now",error:"",receipt:null},
+    ]};
+    const entries = conversationHumanEntries(record, "now", {human:"Human",interrupt:"Interrupt",finish:"Finish",pending:"Pending"});
+    expect(entries.map((entry) => entry.id)).toEqual(["input"]);
+  });
   it("does not coalesce assistant prose across a human instruction", () => {
     const result = issueConversationTimeline([
       { task_id: "run", issue_id: "issue", seq: 2, type: "text", content: "after", created_at: "2026-01-01T00:00:03Z" },

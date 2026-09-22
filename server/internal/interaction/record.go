@@ -1,4 +1,4 @@
-// Package interaction defines the durable, run-scoped human control record.
+// Package interaction defines the durable, run-scoped control record.
 // Keeping it on the task row gives input acceptance and finish a single lock.
 package interaction
 
@@ -69,7 +69,7 @@ func (r *Record) Accept(command agent.InteractionCommand, actor string, now time
 	if command.ID == "" || len(command.ID) > 128 || len(command.Text) > 65536 {
 		return errors.New("invalid command size")
 	}
-	if command.Kind != "input" && command.Kind != "interrupt" && command.Kind != "finish" {
+	if command.Kind != "input" && command.Kind != "interrupt" && command.Kind != "finish" && command.Kind != "complete" {
 		return errors.New("unsupported command")
 	}
 	if command.Kind == "finish" && r.State.State != agent.InteractionAwaitingInput {

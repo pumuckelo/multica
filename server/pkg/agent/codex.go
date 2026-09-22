@@ -1734,7 +1734,7 @@ func (b *codexBackend) executeControlled(ctx context.Context, prompt string, opt
 		}
 
 		for waitingForTurn {
-			if finishRequested && control.finish() {
+			if finishRequested && activitySettled && control.finish() {
 				break
 			}
 			if control != nil && activitySettled && control.Snapshot().State != InteractionAwaitingInput {
@@ -1748,11 +1748,12 @@ func (b *codexBackend) executeControlled(ctx context.Context, prompt string, opt
 			case <-finishPoll:
 			case request := <-commands:
 				receipt := InteractionReceipt{Outcome: "applied"}
-				if request.command.Kind == "finish" {
+				if request.command.Kind == "finish" || request.command.Kind == "complete" {
 					finishRequested = true
 					control.acknowledge(request, receipt, nil)
 					continue
 				}
+				finishRequested = false
 				if request.command.Kind == "interrupt" {
 					if activitySettled || control.Snapshot().State == InteractionAwaitingInput {
 						receipt.Outcome = "already_idle"

@@ -11,7 +11,7 @@ export function conversationHumanEntries(record: TaskInteraction | null | undefi
   labels: { human: string; interrupt: string; finish: string; pending: string }): HumanTimelineEntry[] {
   return [
     ...(record?.openingInput ? [{ id: "opening", createdAt, text: `**${labels.human}**\n\n${record.openingInput}` }] : []),
-    ...(record?.commands ?? []).map((command) => ({ id: command.id, createdAt: command.createdAt,
+    ...(record?.commands ?? []).filter((command) => command.kind !== "complete").map((command) => ({ id: command.id, createdAt: command.createdAt,
       text: `**${labels.human}**\n\n${command.kind === "interrupt" ? labels.interrupt : command.kind === "finish" ? labels.finish : command.text}\n\n${command.error || (!command.receipt ? labels.pending : "")}`,
     })),
   ];
