@@ -51,6 +51,10 @@ func (h *Handler) loadInteractiveTask(w http.ResponseWriter, r *http.Request) (d
 		writeError(w, http.StatusForbidden, "you do not have access to this agent")
 		return task, "", false
 	}
+	if r.Method != http.MethodGet && !h.canInvokeAgent(r.Context(), a, actorType, actorID, h.invokeOriginatorFromRequest(r, actorType, actorID), workspace) {
+		writeError(w, http.StatusForbidden, "you do not have permission to instruct this agent")
+		return task, "", false
+	}
 	return task, user, true
 }
 

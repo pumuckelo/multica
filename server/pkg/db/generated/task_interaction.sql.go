@@ -74,6 +74,15 @@ func (q *Queries) LockTaskInteraction(ctx context.Context, id pgtype.UUID) (Lock
 	return i, err
 }
 
+const markTaskInteractiveFollowup = `-- name: MarkTaskInteractiveFollowup :exec
+UPDATE agent_task_queue SET context = COALESCE(context, '{}'::jsonb) || '{"require_session_resume":true}'::jsonb WHERE id = $1
+`
+
+func (q *Queries) MarkTaskInteractiveFollowup(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markTaskInteractiveFollowup, id)
+	return err
+}
+
 const saveTaskInteraction = `-- name: SaveTaskInteraction :exec
 UPDATE agent_task_queue SET interaction = $2 WHERE id = $1
 `

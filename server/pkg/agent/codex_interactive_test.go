@@ -41,7 +41,13 @@ func init() {
 		result := map[string]any{}
 		switch command.Method {
 		case "initialize":
-		case "thread/start", "thread/resume":
+		case "thread/resume":
+			if command.Params["threadId"] == "missing" {
+				emit(map[string]any{"id": *command.ID, "error": map[string]any{"code": -32000, "message": "thread not found"}})
+				continue
+			}
+			result["thread"] = map[string]any{"id": "thread-live"}
+		case "thread/start":
 			result["thread"] = map[string]any{"id": "thread-live"}
 		case "turn/start":
 			turn++
@@ -66,6 +72,39 @@ func init() {
 		emit(map[string]any{"id": *command.ID, "result": result})
 	}
 	os.Exit(0)
+}
+
+func TestCodexInteractiveMissingResumeDoesNotStartFresh(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	b := &codexBackend{cfg: Config{ExecutablePath: os.Args[0], Env: map[string]string{"MULTICA_TEST_CODEX_INTERACTIVE": "1"}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}}
+	s, err := b.ExecuteInteractive(ctx, "work", ExecOptions{Cwd: t.TempDir(), ResumeSessionID: "missing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for range s.Messages {
+		}
+	}()
+	select {
+	case result := <-s.Result:
+		if result.Status != "failed" || !strings.Contains(result.Error, "refusing a fresh thread") {
+			t.Fatalf("%+v", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("started a fresh thread instead of failing")
+	}
+}
+
+func TestCodexInteractiveToolAndReasoningProgress(t *testing.T) {
+	var messages []Message
+	c := &codexClient{interactiveProgress: true, onMessage: func(m Message) { messages = append(messages, m) }}
+	c.handleItemNotification("item/commandExecution/outputDelta", map[string]any{"itemId": "cmd", "delta": "first "})
+	c.handleItemNotification("item/commandExecution/outputDelta", map[string]any{"itemId": "cmd", "delta": "second"})
+	c.handleItemNotification("item/reasoning/summaryTextDelta", map[string]any{"itemId": "thought", "delta": "checking"})
+	if len(messages) != 3 || messages[1].Output != "first second" || messages[1].Type != MessageToolProgress || messages[2].Type != MessageThinking {
+		t.Fatalf("%+v", messages)
+	}
 }
 
 func TestCodexInteractiveInterruptContinueSameProcess(t *testing.T) {

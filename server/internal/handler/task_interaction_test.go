@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"net/http"
 	"testing"
@@ -97,6 +98,27 @@ func TestTaskInteractionFollowupPinsSourceAndDeduplicates(t *testing.T) {
 	if source != task || note != input["text"] {
 		t.Fatalf("wrong continuation source/instruction: %s %s", source, note)
 	}
+	var context []byte
+	dbfx.QueryRow(t, "SELECT context FROM agent_task_queue WHERE id=$1", first["run_id"]).Scan(&context)
+	var continuation struct {
+		Required bool `json:"require_session_resume"`
+	}
+	if err := json.Unmarshal(context, &continuation); err != nil || !continuation.Required {
+		t.Fatalf("resume requirement not persisted: %s", context)
+	}
 	input["id"] = "concurrent"
 	testutil.Call(t, testHandler.FollowupTaskInteraction, interactionRequest(t, task, runtime, "POST", input)).Want(409)
+}
+
+func TestTaskInteractionAdminViewDoesNotGrantInvocation(t *testing.T) {
+	runtime, worker, _, task := interactiveFixture(t)
+	dbfx.Exec(t, "UPDATE agent SET visibility='workspace', permission_mode='private' WHERE id=$1", worker)
+	member := createWorkspaceMemberUser(t, "observer", "interactive-observer@test.invalid")
+	dbfx.Exec(t, "UPDATE member SET role='admin' WHERE workspace_id=$1 AND user_id=$2", testWorkspaceID, member)
+	req := interactionRequest(t, task, runtime, "POST", map[string]string{})
+	req.Header.Set("X-User-ID", member)
+	testutil.Call(t, testHandler.SendTaskInteraction, req).Want(http.StatusForbidden)
+	req = interactionRequest(t, task, runtime, "GET", nil)
+	req.Header.Set("X-User-ID", member)
+	testutil.Call(t, testHandler.GetTaskInteraction, req).Want(http.StatusOK)
 }

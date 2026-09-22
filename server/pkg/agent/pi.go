@@ -834,11 +834,12 @@ type piStreamEvent struct {
 	AssistantMessageEvent *piAssistantMessageEvent `json:"assistantMessageEvent,omitempty"`
 
 	// tool_execution_start / tool_execution_end
-	ToolCallID string          `json:"toolCallId,omitempty"`
-	ToolName   string          `json:"toolName,omitempty"`
-	Args       json.RawMessage `json:"args,omitempty"`
-	Result     json.RawMessage `json:"result,omitempty"`
-	IsError    bool            `json:"isError,omitempty"`
+	ToolCallID    string          `json:"toolCallId,omitempty"`
+	ToolName      string          `json:"toolName,omitempty"`
+	Args          json.RawMessage `json:"args,omitempty"`
+	Result        json.RawMessage `json:"result,omitempty"`
+	PartialResult json.RawMessage `json:"partialResult,omitempty"`
+	IsError       bool            `json:"isError,omitempty"`
 
 	// error: Message is a string. turn_end: Message is an object.
 	Message json.RawMessage `json:"message,omitempty"`

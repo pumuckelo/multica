@@ -15,6 +15,7 @@ func (c *codexClient) resetInteractiveTurn(gate *codexTurnNotificationGate) {
 	c.turnCompleted = false
 	c.agentMessageStreams = nil
 	c.agentMessageOrder = nil
+	c.toolProgress = nil
 	c.turnErrorMu.Lock()
 	c.turnError = ""
 	c.turnErrorMu.Unlock()

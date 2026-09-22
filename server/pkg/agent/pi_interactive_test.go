@@ -24,6 +24,7 @@ func init() {
 	scanner := bufio.NewScanner(os.Stdin)
 	prompts := 0
 	cleared := false
+	noAssistantAbort := false
 	for scanner.Scan() {
 		var command map[string]any
 		if json.Unmarshal(scanner.Bytes(), &command) != nil {
@@ -35,8 +36,14 @@ func init() {
 			response["data"] = map[string]any{"isStreaming": false}
 		case "prompt":
 			prompts++
+			if command["message"] == "dialog" {
+				emit(map[string]any{"type": "extension_ui_request", "id": "approval", "method": "confirm"})
+			}
+			noAssistantAbort = command["message"] == "no-assistant-abort"
 			emit(map[string]any{"type": "agent_start"})
 			emit(map[string]any{"type": "message_update", "assistantMessageEvent": map[string]any{"type": "text_delta", "delta": fmt.Sprintf("pid=%d prompt=%d", os.Getpid(), prompts)}})
+			// Low-level end can precede retries/compaction; it is not terminal.
+			emit(map[string]any{"type": "agent_end"})
 			if prompts > 1 || command["message"] == "finish" {
 				emit(map[string]any{"type": "turn_end", "message": map[string]any{"stopReason": "stop", "model": "fake", "usage": map[string]int{"input": 2, "output": 3}}})
 				emit(map[string]any{"type": "agent_settled"})
@@ -50,7 +57,9 @@ func init() {
 			if !cleared {
 				os.Exit(3)
 			}
-			emit(map[string]any{"type": "turn_end", "message": map[string]any{"stopReason": "aborted"}})
+			if !noAssistantAbort {
+				emit(map[string]any{"type": "turn_end", "message": map[string]any{"stopReason": "aborted"}})
+			}
 			emit(map[string]any{"type": "agent_settled"})
 		default:
 			os.Exit(4)
@@ -64,8 +73,12 @@ func testPiInteractive(t *testing.T, prompt string) (*Session, context.Context, 
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
-	b := &piBackend{cfg: Config{ExecutablePath: os.Args[0], Env: map[string]string{"MULTICA_TEST_PI_RPC": "1"}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}}
-	s, err := b.ExecuteInteractive(ctx, prompt, ExecOptions{ResumeSessionID: filepath.Join(t.TempDir(), "session.jsonl")})
+	b := &piBackend{cfg: Config{ExecutablePath: os.Args[0], CLIVersion: "0.87.0", Env: map[string]string{"MULTICA_TEST_PI_RPC": "1"}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}}
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(path, []byte("{\"type\":\"session\"}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := b.ExecuteInteractive(ctx, prompt, ExecOptions{ResumeSessionID: path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,5 +161,54 @@ func TestPiRPCArgsKeepWrapperAndProtocolSeparate(t *testing.T) {
 	joined := strings.Join(args, " ")
 	if strings.Contains(joined, "-p") || strings.Contains(joined, "json") || !strings.HasPrefix(joined, "--mode rpc --session") || !strings.Contains(joined, "--tools read") {
 		t.Fatalf("%v", args)
+	}
+}
+
+func TestPiInteractiveAbortWithoutAssistantMessage(t *testing.T) {
+	s, ctx, _ := testPiInteractive(t, "no-assistant-abort")
+	receipt, err := s.Control.Submit(ctx, InteractionCommand{ID: "stop", Kind: "interrupt", Activity: 1})
+	if err != nil || receipt.Snapshot.State != InteractionAwaitingInput {
+		t.Fatalf("%+v %v", receipt, err)
+	}
+	select {
+	case <-s.Result:
+		t.Fatal("abort or agent_end ended the run")
+	default:
+	}
+	if _, err := s.Control.Submit(ctx, InteractionCommand{ID: "next", Kind: "input", Activity: 1, Text: "finish"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case result := <-s.Result:
+		if result.Status != "completed" {
+			t.Fatalf("%+v", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("completion timeout")
+	}
+}
+
+func TestPiInteractiveRejectsUnknownProtocolAndMissingHistory(t *testing.T) {
+	for _, version := range []string{"", "0.86.0"} {
+		b := &piBackend{cfg: Config{CLIVersion: version, ExecutablePath: "/definitely-missing/pi"}}
+		if _, err := b.ExecuteInteractive(context.Background(), "work", ExecOptions{}); err == nil || !strings.Contains(err.Error(), "0.87.0") {
+			t.Fatalf("version %q: %v", version, err)
+		}
+	}
+	b := &piBackend{cfg: Config{CLIVersion: "0.87.0", ExecutablePath: os.Args[0]}}
+	if _, err := b.ExecuteInteractive(context.Background(), "work", ExecOptions{ResumeSessionID: filepath.Join(t.TempDir(), "missing")}); err == nil || !strings.Contains(err.Error(), "saved Pi session") {
+		t.Fatalf("missing history: %v", err)
+	}
+}
+
+func TestPiInteractiveDialogFailsClosed(t *testing.T) {
+	s, ctx, _ := testPiInteractive(t, "dialog")
+	select {
+	case result := <-s.Result:
+		if result.Status != "failed" || !strings.Contains(result.Error, "no approval was granted") {
+			t.Fatalf("%+v", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("invisible dialog left the run hanging")
 	}
 }

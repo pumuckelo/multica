@@ -1040,6 +1040,7 @@ func (b *codexBackend) ExecuteInteractive(ctx context.Context, prompt string, op
 	// peer may already have accepted human input before a transport failure.
 	control := newLiveControl()
 	control.beforeFinish = opts.InteractiveBeforeFinish
+	opts.RequireSessionResume = opts.ResumeSessionID != "" || opts.RequireSessionResume
 	return b.executeControlled(ctx, prompt, opts, 1, control)
 }
 
@@ -1234,6 +1235,7 @@ func (b *codexBackend) executeControlled(ctx context.Context, prompt string, opt
 	}
 
 	c := &codexClient{
+		interactiveProgress:    control != nil,
 		cfg:                    b.cfg,
 		stdin:                  stdin,
 		pending:                make(map[int]*pendingRPC),
@@ -2073,6 +2075,8 @@ func codexTurnInput(prompt string, resumeExpected, resumed bool, notice string) 
 // answer a fresh start request. The returned threadID is what subsequent
 // turn/start calls must reference, and resumed indicates whether the prior
 // thread was picked up (only useful for logging).
+// Interactive continuations set RequireSessionResume and reject every fresh
+// fallback; ordinary one-shot executions keep the existing recovery behavior.
 func (c *codexClient) startOrResumeThread(ctx context.Context, opts ExecOptions, logger *slog.Logger) (string, bool, error) {
 	if priorThreadID := opts.ResumeSessionID; priorThreadID != "" {
 		// thread/resume reuses the thread's persisted model and reasoning
@@ -2104,6 +2108,9 @@ func (c *codexClient) startOrResumeThread(ctx context.Context, opts ExecOptions,
 			"method", c.threadSetupMethod,
 		)
 		resumeResult, err := c.request(ctx, "thread/resume", resumeParams)
+		if opts.RequireSessionResume && (err != nil || extractThreadID(resumeResult) != priorThreadID) {
+			return "", false, fmt.Errorf("saved Codex conversation could not be resumed; refusing a fresh thread: %v", err)
+		}
 		if err == nil {
 			if threadID := extractThreadID(resumeResult); threadID != "" {
 				logger.Info("codex lifecycle",
@@ -2437,6 +2444,8 @@ func describeCodexSemanticActivity(msg Message) string {
 // ── codexClient: JSON-RPC 2.0 transport ──
 
 type codexClient struct {
+	interactiveProgress bool
+	toolProgress        map[string]string // reader-owned, bounded preview per active tool
 	// Serializes native notifications with an interactive turn reset. Responses
 	// remain independent so a lifecycle RPC can await its reader safely.
 	notificationMu         sync.Mutex
@@ -3770,6 +3779,27 @@ func (c *codexClient) completeAgentMessage(itemID, text string) {
 }
 
 func (c *codexClient) handleItemNotification(method string, params map[string]any) {
+	if c.interactiveProgress && c.onMessage != nil {
+		id, _ := params["itemId"].(string)
+		delta, _ := params["delta"].(string)
+		switch method {
+		case "item/commandExecution/outputDelta":
+			if c.toolProgress == nil {
+				c.toolProgress = make(map[string]string)
+			}
+			preview := c.toolProgress[id] + delta
+			// One extra byte lets the daemon retain its truncation marker.
+			if len(preview) > 8193 {
+				preview = preview[:8193]
+			}
+			c.toolProgress[id] = preview
+			c.onMessage(Message{Type: MessageToolProgress, Tool: "exec_command", CallID: id, Output: preview})
+			return
+		case "item/reasoning/summaryTextDelta", "item/reasoning/textDelta":
+			c.onMessage(Message{Type: MessageThinking, Content: delta})
+			return
+		}
+	}
 	item, _ := params["item"].(map[string]any)
 	itemType, _ := item["type"].(string)
 	itemID, _ := item["id"].(string)
@@ -3806,6 +3836,7 @@ func (c *codexClient) handleItemNotification(method string, params map[string]an
 		}
 
 	case method == "item/completed" && itemType == "commandExecution":
+		delete(c.toolProgress, itemID)
 		output, _ := item["aggregatedOutput"].(string)
 		if c.onMessage != nil {
 			c.onMessage(Message{

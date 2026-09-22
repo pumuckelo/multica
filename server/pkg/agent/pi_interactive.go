@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -18,7 +19,7 @@ type piRPC struct {
 	ctx      context.Context
 	stdin    io.Writer
 	lines    <-chan []byte
-	onEvent  func([]byte)
+	onEvent  func([]byte) error
 	sequence uint64
 }
 
@@ -31,6 +32,9 @@ type piInteractiveResponse struct {
 }
 
 func (p *piRPC) request(kind string, fields map[string]any) (json.RawMessage, error) {
+	if err := p.ctx.Err(); err != nil {
+		return nil, err
+	}
 	p.sequence++
 	id := fmt.Sprintf("multica-%d", p.sequence)
 	if fields == nil {
@@ -63,7 +67,9 @@ func (p *piRPC) request(kind string, fields map[string]any) (json.RawMessage, er
 				return nil, errors.New("invalid Pi RPC JSON")
 			}
 			if response.Type != "response" {
-				p.onEvent(line)
+				if err := p.onEvent(line); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if response.ID != id {
@@ -82,6 +88,10 @@ func (p *piRPC) request(kind string, fields map[string]any) (json.RawMessage, er
 }
 
 func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts ExecOptions) (*Session, error) {
+	version, versionErr := parseSemver(b.cfg.CLIVersion)
+	if versionErr != nil || version.lessThan(semver{Minor: 87}) {
+		return nil, errors.New("interactive Pi requires a detected Pi version >= 0.87.0 (agent_settled and clear_queue); wrappers must forward --version")
+	}
 	if b.providerLabel != "" && b.providerLabel != "pi" {
 		return nil, errors.New("interactive mode is supported only for Pi, not Pi forks")
 	}
@@ -97,6 +107,12 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 		return nil, fmt.Errorf("pi executable: %w", err)
 	}
 	path := opts.ResumeSessionID
+	if path != "" {
+		info, statErr := os.Stat(path)
+		if statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+			return nil, errors.New("saved Pi session is unavailable or empty; refusing to start an unrelated conversation")
+		}
+	}
 	if path == "" {
 		path, err = newPiSessionPath()
 		if err != nil {
@@ -185,17 +201,17 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 		}
 		var output, textBuffer strings.Builder
 		settled, stopReason, activityError := false, "", ""
-		onEvent := func(line []byte) {
+		onEvent := func(line []byte) error {
 			var event piStreamEvent
 			if json.Unmarshal(line, &event) != nil {
-				return
+				return errors.New("invalid Pi RPC event JSON")
 			}
 			switch event.Type {
 			case "agent_start", "turn_start":
 				settled, stopReason, activityError = false, "", ""
 			case "message_update":
 				if event.AssistantMessageEvent == nil {
-					return
+					return nil
 				}
 				switch event.AssistantMessageEvent.Type {
 				case "text_delta":
@@ -212,10 +228,12 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 				emit(Message{Type: MessageToolUse, Tool: event.ToolName, CallID: event.ToolCallID, Input: input})
 			case "tool_execution_end":
 				emit(Message{Type: MessageToolResult, Tool: event.ToolName, CallID: event.ToolCallID, Output: decodePiResult(event.Result)})
+			case "tool_execution_update":
+				emit(Message{Type: MessageToolProgress, Tool: event.ToolName, CallID: event.ToolCallID, Output: decodePiResult(event.PartialResult)})
 			case "turn_end":
 				message := decodePiMessage(event.Message)
 				if message == nil {
-					return
+					return nil
 				}
 				stopReason, activityError = message.StopReason, message.ErrorMessage
 				if message.Usage != nil {
@@ -245,7 +263,17 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 					output.WriteString(text)
 					emit(Message{Type: MessageText, Content: text})
 				}
+			case "extension_ui_request":
+				var dialog struct {
+					Method string `json:"method"`
+				}
+				_ = json.Unmarshal(line, &dialog)
+				switch dialog.Method {
+				case "select", "confirm", "input", "editor":
+					return errors.New("Pi extension requested a dialog; dialog routing is not supported by issue conversations (no approval was granted)")
+				}
 			}
+			return nil
 		}
 		rpc := &piRPC{ctx: runCtx, stdin: stdin, lines: lines, onEvent: onEvent}
 		fail := func(err error) {
@@ -295,7 +323,10 @@ func (b *piBackend) ExecuteInteractive(ctx context.Context, prompt string, opts 
 					fail(errors.New("Pi RPC process exited before run completion"))
 					return
 				}
-				onEvent(line)
+				if err := onEvent(line); err != nil {
+					fail(err)
+					return
+				}
 			case request := <-control.queue:
 				receipt := InteractionReceipt{Outcome: "applied"}
 				if request.command.Kind == "interrupt" {

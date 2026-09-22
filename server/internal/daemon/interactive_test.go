@@ -90,12 +90,16 @@ func TestInteractiveBridgeDurableInterruptAndContinuation(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	backend, err := agent.New("pi", agent.Config{ExecutablePath: os.Args[0], Env: map[string]string{"MULTICA_TEST_DAEMON_INTERACTIVE": "1"}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	backend, err := agent.New("pi", agent.Config{ExecutablePath: os.Args[0], CLIVersion: "0.87.0", Env: map[string]string{"MULTICA_TEST_DAEMON_INTERACTIVE": "1"}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
 		t.Fatal(err)
 	}
 	d := &Daemon{client: NewClient(server.URL)}
-	session, err := d.startInteractiveExecution(ctx, backend.(agent.InteractiveBackend), "work", agent.ExecOptions{ResumeSessionID: filepath.Join(t.TempDir(), "session.jsonl")}, "task", "runtime")
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(path, []byte("{\"type\":\"session\"}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	session, err := d.startInteractiveExecution(ctx, backend.(agent.InteractiveBackend), "work", agent.ExecOptions{ResumeSessionID: path}, "task", "runtime")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,5 +154,26 @@ func TestInteractiveBridgeDurableInterruptAndContinuation(t *testing.T) {
 	defer mu.Unlock()
 	if registrations != 1 || !record.Finishing || record.Pending() {
 		t.Fatalf("unsafe final state: registrations=%d record=%+v", registrations, record)
+	}
+}
+
+func TestInteractiveModeIsIssueAndProviderScoped(t *testing.T) {
+	for _, tc := range []struct {
+		name, provider, issue, config string
+		want                          bool
+	}{
+		{"pi", "pi", "issue", `{"interactive_task_sessions":true}`, true},
+		{"codex", "codex", "child-issue", `{"interactive_task_sessions":true}`, true},
+		{"standalone", "pi", "", `{"interactive_task_sessions":true}`, false},
+		{"unsupported", "claude", "issue", `{"interactive_task_sessions":true}`, false},
+		{"disabled", "pi", "issue", `{}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := withInteractiveIssueRun(context.Background(), Task{IssueID: tc.issue, RuntimeID: "runtime", Agent: &AgentData{RuntimeConfig: json.RawMessage(tc.config)}}, tc.provider)
+			_, enabled := ctx.Value(interactiveRunKey{}).(string)
+			if enabled != tc.want {
+				t.Fatalf("enabled=%v", enabled)
+			}
+		})
 	}
 }

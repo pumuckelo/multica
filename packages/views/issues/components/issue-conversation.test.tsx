@@ -9,6 +9,15 @@ import { useIssueConversationDrafts } from "@multica/core/chat";
 import { renderWithI18n } from "../../test/i18n";
 import { IssueConversationButton } from "./issue-conversation";
 
+vi.mock("@multica/core/api", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@multica/core/api")>(),
+  api: {
+    getTaskInteraction: vi.fn(), getAgent: vi.fn(), listTaskMessages: vi.fn(),
+    listTasksByIssue: vi.fn(), cancelTaskById: vi.fn(), sendTaskInteraction: vi.fn(),
+    followupTaskInteraction: vi.fn(),
+  },
+}));
+
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace" }));
 vi.mock("../../common/task-transcript/agent-transcript-dialog", () => ({
   AgentTranscriptDialog: ({ headerSlot, footerSlot }: { headerSlot: ReactNode; footerSlot: ReactNode }) => <div role="dialog">{headerSlot}{footerSlot}</div>,
@@ -19,6 +28,7 @@ const task: AgentTask = { id, agent_id: "agent", runtime_id: "runtime", issue_id
 let record: TaskInteraction;
 const clients: QueryClient[] = [];
 beforeEach(() => {
+  vi.clearAllMocks();
   record = { owner: "process", state: { state: "working", activity: 1 }, openingInput: "", deadline: new Date(Date.now() + 3600000).toISOString(), updatedAt: new Date().toISOString(), finishing: false, commands: [] };
   useIssueConversationDrafts.setState({ drafts: {} });
   vi.spyOn(api, "getTaskInteraction").mockImplementation(async () => record);
@@ -34,7 +44,7 @@ async function open(run = task) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }); clients.push(client);
   renderWithI18n(<QueryClientProvider client={client}><IssueConversationButton issueId="issue" tasks={[run]} /></QueryClientProvider>);
   fireEvent.click(screen.getByRole("button", { name: "Open conversation" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Interrupt" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("textbox")).toBeEnabled());
   return client;
 }
 
@@ -63,6 +73,17 @@ describe("issue worker conversation", () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
     await waitFor(() => expect(api.cancelTaskById).toHaveBeenCalledWith(id));
+    expect(api.sendTaskInteraction).not.toHaveBeenCalled();
+  });
+  it("opening completed history does not execute; explicit send creates a follow-up", async () => {
+    const completed = { ...task, status: "completed" as const };
+    vi.mocked(api.listTasksByIssue).mockResolvedValue([completed]);
+    await open(completed);
+    expect(api.followupTaskInteraction).not.toHaveBeenCalled();
+    expect(api.sendTaskInteraction).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "One more change" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start follow-up run" }));
+    await waitFor(() => expect(api.followupTaskInteraction).toHaveBeenCalledWith(id, expect.any(String), "One more change"));
     expect(api.sendTaskInteraction).not.toHaveBeenCalled();
   });
 });

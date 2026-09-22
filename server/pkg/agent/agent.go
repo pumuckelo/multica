@@ -75,6 +75,8 @@ type ExecOptions struct {
 	// HandshakeTimeout; when both are zero Codex uses separate built-in defaults.
 	ThreadHandshakeTimeout time.Duration
 	ResumeSessionID        string // if non-empty, resume a previous agent session
+	// RequireSessionResume forbids fresh-thread fallback for an explicit continuation.
+	RequireSessionResume bool
 	// ResumeExpected records that this task intended to continue a prior
 	// conversation, independent of ResumeSessionID (which a fallback retry may
 	// clear). When it is true but the backend ends up on a fresh thread — the
@@ -193,13 +195,14 @@ type Session struct {
 type MessageType string
 
 const (
-	MessageText       MessageType = "text"
-	MessageThinking   MessageType = "thinking"
-	MessageToolUse    MessageType = "tool-use"
-	MessageToolResult MessageType = "tool-result"
-	MessageStatus     MessageType = "status"
-	MessageError      MessageType = "error"
-	MessageLog        MessageType = "log"
+	MessageText         MessageType = "text"
+	MessageThinking     MessageType = "thinking"
+	MessageToolUse      MessageType = "tool-use"
+	MessageToolResult   MessageType = "tool-result"
+	MessageToolProgress MessageType = "tool-progress" // accumulated, nonterminal output snapshot
+	MessageStatus       MessageType = "status"
+	MessageError        MessageType = "error"
+	MessageLog          MessageType = "log"
 )
 
 // Message is a unified event emitted by an agent during execution.

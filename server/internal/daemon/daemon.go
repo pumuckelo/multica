@@ -8665,6 +8665,12 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		QwenpawWorkspace:       env.QwenpawWorkspace,
 	}
 	ctx = withInteractiveIssueRun(ctx, task, provider)
+	if task.RequireSessionResume {
+		if _, interactive := ctx.Value(interactiveRunKey{}).(string); !interactive || execOpts.ResumeSessionID == "" {
+			return TaskResult{}, fmt.Errorf("saved conversation or interactive runtime is unavailable; refusing to start a fresh conversation")
+		}
+		execOpts.RequireSessionResume = true
+	}
 	// Some providers do not reliably load the per-task runtime config files we
 	// write into the task workdir:
 	//   - openclaw is pinned to the task workdir via the per-task config we
@@ -9383,6 +9389,7 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 		var pendingType string
 		var pendingAt time.Time
 		var batch []TaskMessageData
+		progressInBatch := map[string]int{}
 		callIDToTool := map[string]string{}
 		// Provider IDs can restart on a same-task retry (for example item_0).
 		// Allocate opaque transcript IDs per execution, including orphan results,
@@ -9441,6 +9448,7 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 			sealPendingLocked()
 			toSend := batch
 			batch = nil
+			progressInBatch = map[string]int{}
 			mu.Unlock()
 
 			if len(toSend) > 0 {
@@ -9567,6 +9575,22 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 					})
 					mu.Unlock()
 					flushFirstVisible()
+				case agent.MessageToolProgress:
+					output, truncated := toolOutputPreview(msg.Output)
+					mu.Lock()
+					sealPendingLocked()
+					toolName := msg.Tool
+					if toolName == "" {
+						toolName = callIDToTool[msg.CallID]
+					}
+					callID := transcriptCallID(msg.CallID)
+					if index, exists := progressInBatch[callID]; exists {
+						batch[index].Output, batch[index].OutputTruncated = output, &truncated
+					} else {
+						progressInBatch[callID] = len(batch)
+						batch = append(batch, TaskMessageData{Seq: int(msgSeq.Add(1)), Type: "tool_progress", CallID: callID, Tool: toolName, Output: output, OutputTruncated: &truncated, CreatedAt: observedAt})
+					}
+					mu.Unlock()
 				case agent.MessageToolResult:
 					// Decrement only when the count would stay >= 0. A stray
 					// tool_result with no matching tool_use (backend bug or

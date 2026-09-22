@@ -198,7 +198,7 @@ function stepFilterKey(step: TraceStep): TranscriptFilterKey {
 function stepHaystack(step: TraceStep): string {
   if (step.kind !== "call") return (step.item.content ?? "").toLowerCase();
   const input = step.call?.input ? JSON.stringify(step.call.input) : "";
-  return `${step.tool} ${input} ${(step.result?.output ?? "").slice(0, 4000)}`.toLowerCase();
+  return `${step.tool} ${input} ${((step.result ?? step.progress)?.output ?? "").slice(0, 4000)}`.toLowerCase();
 }
 
 function StepIcon({ step, className }: { step: TraceStep; className?: string }) {
@@ -1661,9 +1661,9 @@ function callSummary(step: TraceCallStep, labels: TraceSummaryLabels): string {
     const summary = traceToolArgSummary(step.call.input, labels);
     if (summary) return summary;
   }
-  if (!step.result) return "";
-  if (readImageResult(step.result.output)) return "";
-  return traceEventSummary({ type: "tool_result", output: step.result.output }, labels);
+  const output = step.result ?? step.progress;
+  if (!output || readImageResult(output.output)) return "";
+  return traceEventSummary({ type: "tool_result", output: output.output }, labels);
 }
 
 function firstLineOf(value: string | undefined): string {
@@ -1763,9 +1763,9 @@ function StepInspector({
                 <StepBody item={call.call} />
               </InspectorSection>
             )}
-            {call.result && (
+            {(call.result ?? call.progress) && (
               <InspectorSection label={t(($) => $.transcript.step_result)}>
-                <StepBody item={call.result} />
+                <StepBody item={(call.result ?? call.progress)!} />
               </InspectorSection>
             )}
           </>
